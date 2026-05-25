@@ -35,6 +35,9 @@ class AccessError extends Error {
     super(message);
     this.name = "AccessError";
     this.code = code;
+    // Map to an HTTP status so the router surfaces it correctly (not a 500).
+    this.statusCode =
+      code === "bad_request" ? 400 : code === "not_found" ? 404 : 403;
   }
 }
 

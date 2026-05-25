@@ -10,6 +10,7 @@ const {
   QueryCommand,
   ScanCommand,
   BatchWriteCommand,
+  TransactWriteCommand,
 } = require("@aws-sdk/lib-dynamodb");
 
 const raw = new DynamoDBClient({});
@@ -115,4 +116,35 @@ async function batchWrite(table, items) {
   }
 }
 
-module.exports = { ddb, T, PRIVATE_TABLES, get, put, update, del, query, scan, batchWrite };
+// Atomic multi-item write. Used by the send pipeline to write a Message only if
+// the Thread is not in safetyState 'ended' (DDB has no cross-table transaction
+// otherwise). Throws on ConditionalCheckFailed inside a TransactionCanceledException.
+async function transactWrite(items) {
+  await ddb.send(new TransactWriteCommand({ TransactItems: items }));
+}
+
+// True if a thrown error is a transaction cancellation due to a failed condition.
+function isConditionalCancel(err) {
+  if (!err) return false;
+  if (err.name === "ConditionalCheckFailedException") return true;
+  if (err.name === "TransactionCanceledException") {
+    const reasons = err.CancellationReasons || [];
+    return reasons.some((r) => r && r.Code === "ConditionalCheckFailed");
+  }
+  return false;
+}
+
+module.exports = {
+  ddb,
+  T,
+  PRIVATE_TABLES,
+  get,
+  put,
+  update,
+  del,
+  query,
+  scan,
+  batchWrite,
+  transactWrite,
+  isConditionalCancel,
+};

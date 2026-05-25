@@ -1,229 +1,332 @@
 "use strict";
 
-// Main REST API. The streaming chat endpoint lives in handlers/chat.js
-// (separate Lambda function URL because API Gateway doesn't stream).
+// Derived from the gatsby scaffold (Development/gatsby); see NOTICE.md.
+// BetterVibe REST API (apiFn). Multi-tenant relationships/threads/messages and
+// the send pipeline with the safety hard-stop. Private draft review streaming
+// lives in handlers/coach.js (separate Lambda function URL — streaming).
 //
-// Routes:
-//   GET    /me                       — current member
-//   GET    /characters               — list all characters
-//   GET    /messages                 — list recent messages (paginated)
-//   POST   /messages                 — non-streaming fallback for posting a message
-//   POST   /me/avatar-upload-url     — pre-signed PUT for friend's own avatar
-//   POST   /admin/members/:id/approve — admin: approve a pending signup
-//   POST   /admin/members/:id/deny    — admin: deny a pending signup
-//   GET    /admin/members            — admin: list all members
-//   GET    /admin/usage              — admin: usage / cost summary
+// Phase 1 routes:
+//   POST /relationships                                   create a relationship
+//   GET  /relationships                                   list mine
+//   POST /relationships/:rid/invite                       create partner invite link
+//   POST /invites/:inviteId/accept                        accept (asymmetric onboarding)
+//   POST /relationships/:rid/threads                      create a thread
+//   GET  /relationships/:rid/threads                      list threads
+//   GET  /relationships/:rid/threads/:tid/messages        list/poll SENT messages
+//   GET  /relationships/:rid/threads/:tid/draft           my private draft
+//   POST /relationships/:rid/threads/:tid/draft           save my private draft
+//   POST /relationships/:rid/threads/:tid/send            send pipeline + safety
+//
+// Deferred (later phases): profiles §1, observations/patterns §10, mediator §9,
+// feedback §20, admin §19, deletion §17.
 
 const { Router } = require("../lib/router");
+const { ok, badRequest, notFound } = require("../lib/response");
 const {
-  ok,
-  badRequest,
-  unauthorized,
-  notFound,
-  forbidden,
-} = require("../lib/response");
-const { get, put, query, scan, T } = require("../lib/ddb");
+  get,
+  put,
+  update,
+  del,
+  query,
+  T,
+  transactWrite,
+  isConditionalCancel,
+} = require("../lib/ddb");
 const { newId, isoNow } = require("../lib/ids");
-const {
-  getCallerFromEvent,
-  requireAuth,
-  requireAdmin,
-} = require("../lib/auth");
-const { CHARACTERS, CHARACTER_IDS } = require("../ai/personas");
-const { sanitizeMember } = require("./auth");
-
-const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
-const {
-  getSignedUrl,
-} = require("@aws-sdk/s3-request-presigner");
-
-const s3 = new S3Client({});
-const AVATARS_BUCKET = process.env.AVATARS_BUCKET;
-const AWS_REGION = process.env.AWS_REGION || "us-east-1";
-// Friend avatars live in a separate S3 bucket (AvatarsBucket) so they survive
-// frontend redeploys. The bucket is public-read but is NOT behind CloudFront —
-// CloudFront only fronts the FrontendBucket. So we serve friend avatars from
-// the direct S3 URL. Character avatars stay at /avatars/characters/ under
-// CloudFront because they're baked into the Vite build.
-const AVATARS_PUBLIC_BASE = AVATARS_BUCKET
-  ? `https://${AVATARS_BUCKET}.s3.${AWS_REGION}.amazonaws.com`
-  : "";
-
-const ROOM_ID = "main";
+const { getCallerFromEvent, requireAuth } = require("../lib/auth");
+const { assertMember, listSharedMessages } = require("../lib/access");
+const { classifyMessage, SAFETY_MESSAGE } = require("../ai/safety");
 
 const router = new Router();
 
-// --- characters --------------------------------------------------------------
-
-function publicCharacter(c) {
-  return {
-    characterId: c.characterId,
-    displayName: c.displayName,
-    avatarUrl: c.avatarPath, // served from frontend bucket via CloudFront
-    accentHex: c.accentHex,
-    moodDimensions: c.moodDimensions,
-  };
+async function caller(event) {
+  const c = await getCallerFromEvent(event);
+  requireAuth(c); // throws 401
+  return c.user;
 }
 
-router.get("/characters", async ({ event }) => {
-  const caller = await getCallerFromEvent(event);
-  requireAuth(caller);
+// --- relationships ----------------------------------------------------------
 
-  // Try DynamoDB first; fall back to the static personas.js list if the table
-  // hasn't been seeded yet (admin/bootstrap-characters.ts populates it).
-  const dbRows = await scan(T.characters);
-  if (dbRows.length === CHARACTER_IDS.length) {
-    return ok({ characters: dbRows.map(publicCharacter) });
-  }
-  const fallback = CHARACTER_IDS.map((id) => publicCharacter(CHARACTERS[id]));
-  return ok({ characters: fallback });
-});
-
-// --- messages ----------------------------------------------------------------
-
-router.get("/messages", async ({ event }) => {
-  const caller = await getCallerFromEvent(event);
-  requireAuth(caller);
-
-  const qs = event.queryStringParameters || {};
-  const limit = Math.min(parseInt(qs.limit || "100", 10) || 100, 500);
-  const before = qs.before || null;
-
-  // Most recent first, then reverse client-side. Single PK = ROOM_ID.
-  const params = {
-    KeyConditionExpression: "roomId = :r",
-    ExpressionAttributeValues: { ":r": ROOM_ID },
-    ScanIndexForward: false,
-    Limit: limit,
-  };
-  if (before) {
-    params.KeyConditionExpression += " AND ts < :b";
-    params.ExpressionAttributeValues[":b"] = before;
-  }
-  const items = await query(T.messages, params);
-  // Return ascending (oldest first) for natural chat order.
-  items.reverse();
-  return ok({ messages: items });
-});
-
-// Non-streaming fallback. Real-time chat goes through the chatFn endpoint;
-// this is here for testing without SSE plumbing.
-router.post("/messages", async ({ body, event }) => {
-  const caller = await getCallerFromEvent(event);
-  requireAuth(caller);
-
-  const text = (body.text || "").toString().trim();
-  if (!text) return badRequest("text required");
-
-  const message = {
-    roomId: ROOM_ID,
-    ts: isoNow(),
-    messageId: newId("msg"),
-    senderType: "friend",
-    senderId: caller.member.memberId,
-    senderName: `${caller.member.firstName} ${caller.member.lastName || ""}`.trim(),
-    text,
-  };
-  await put(T.messages, message);
-  return ok({ message });
-});
-
-// --- avatar upload -----------------------------------------------------------
-
-router.post("/me/avatar-upload-url", async ({ body, event }) => {
-  const caller = await getCallerFromEvent(event);
-  requireAuth(caller);
-
-  const ext = ((body.ext || "jpg") + "").toLowerCase().replace(/[^a-z]/g, "");
-  if (!["jpg", "jpeg", "png", "webp"].includes(ext)) {
-    return badRequest("ext must be jpg|png|webp");
-  }
-  const key = `friends/${caller.member.memberId}.${ext}`;
-  const cmd = new PutObjectCommand({
-    Bucket: AVATARS_BUCKET,
-    Key: key,
-    ContentType: `image/${ext === "jpg" ? "jpeg" : ext}`,
-  });
-  const url = await getSignedUrl(s3, cmd, { expiresIn: 300 });
-  const publicUrl = `${AVATARS_PUBLIC_BASE}/${key}`;
-
-  // Persist the avatarUrl on the member so we have it after upload.
-  await put(T.members, {
-    ...caller.member,
-    avatarUrl: publicUrl,
+router.post("/relationships", async ({ event, body }) => {
+  const user = await caller(event);
+  const relationshipId = newId("rel");
+  const rel = {
+    relationshipId,
+    userAId: user.userId,
+    userBId: null,
+    type: (body.type || "couple").toString(),
+    label: (body.label || "Us").toString(),
+    status: "active",
+    safetyState: "calm",
+    createdAt: isoNow(),
     updatedAt: isoNow(),
+  };
+  await put(T.relationships, rel);
+  await put(T.relationshipMembers, {
+    userId: user.userId,
+    relationshipId,
+    role: "owner",
+    joinedAt: isoNow(),
   });
-
-  return ok({ uploadUrl: url, avatarUrl: publicUrl });
+  return ok({ relationship: rel });
 });
 
-// --- admin -------------------------------------------------------------------
-
-router.get("/admin/members", async ({ event }) => {
-  const caller = await getCallerFromEvent(event);
-  requireAdmin(caller);
-  const all = await scan(T.members);
-  all.sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
-  return ok({ members: all.map(sanitizeMember) });
-});
-
-router.post("/admin/members/:id/approve", async ({ params, event }) => {
-  const caller = await getCallerFromEvent(event);
-  requireAdmin(caller);
-  const member = await get(T.members, { memberId: params.id });
-  if (!member) return notFound("Member not found");
-  const updated = { ...member, status: "active", updatedAt: isoNow() };
-  await put(T.members, updated);
-  return ok({ member: sanitizeMember(updated) });
-});
-
-router.post("/admin/members/:id/deny", async ({ params, event }) => {
-  const caller = await getCallerFromEvent(event);
-  requireAdmin(caller);
-  const member = await get(T.members, { memberId: params.id });
-  if (!member) return notFound("Member not found");
-  const updated = { ...member, status: "denied", updatedAt: isoNow() };
-  await put(T.members, updated);
-  return ok({ member: sanitizeMember(updated) });
-});
-
-router.get("/admin/usage", async ({ event }) => {
-  const caller = await getCallerFromEvent(event);
-  requireAdmin(caller);
-  const members = await scan(T.members);
-  const summary = members
-    .map((m) => ({
-      memberId: m.memberId,
-      name: `${m.firstName} ${m.lastName || ""}`.trim(),
-      email: m.email,
-      usage: m.usage || null,
-    }))
-    .filter((s) => s.usage);
-  const totalCost = summary.reduce(
-    (acc, s) => acc + (s.usage?.totals?.costUsd || 0),
-    0
+router.get("/relationships", async ({ event }) => {
+  const user = await caller(event);
+  const members = await query(T.relationshipMembers, {
+    KeyConditionExpression: "userId = :u",
+    ExpressionAttributeValues: { ":u": user.userId },
+  });
+  const rels = await Promise.all(
+    members.map((m) => get(T.relationships, { relationshipId: m.relationshipId }))
   );
-  return ok({ members: summary, totalCostUsd: totalCost });
+  return ok({ relationships: rels.filter(Boolean) });
 });
 
-// --- handler -----------------------------------------------------------------
+// --- invites (asymmetric onboarding) ----------------------------------------
 
-exports.handler = async (event) => {
-  try {
-    return await router.handle(event);
-  } catch (e) {
-    if (e?.statusCode) {
-      return {
-        statusCode: e.statusCode,
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ error: e.message }),
-      };
-    }
-    console.error("api_handler_error", e);
-    return {
-      statusCode: 500,
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ error: "Internal server error" }),
-    };
+router.post("/relationships/:rid/invite", async ({ event, params }) => {
+  const user = await caller(event);
+  await assertMember(user.userId, params.rid); // throws 403
+  const inviteId = newId("inv");
+  const ttlDays = parseInt(process.env.INVITE_TTL_DAYS || "14", 10);
+  const expiresAt = Math.floor((Date.now() + ttlDays * 86400 * 1000) / 1000);
+  await put(T.relationshipInvites, {
+    inviteId,
+    relationshipId: params.rid,
+    createdBy: user.userId,
+    status: "pending",
+    createdAt: isoNow(),
+    expiresAt,
+  });
+  const base = process.env.APP_URL || "";
+  return ok({ inviteId, link: `${base}/invite/${inviteId}`, expiresAt });
+});
+
+// Single-use, expiring (TTL), relationship-bound. The reluctant partner taps a
+// link → one step to join.
+router.post("/invites/:inviteId/accept", async ({ event, params }) => {
+  const user = await caller(event);
+  const invite = await get(T.relationshipInvites, { inviteId: params.inviteId });
+  if (!invite) return badRequest("Invite not found");
+  if (invite.status !== "pending") return badRequest("Invite already used");
+  if (invite.expiresAt && invite.expiresAt < Math.floor(Date.now() / 1000)) {
+    return badRequest("Invite expired");
   }
-};
+  const rel = await get(T.relationships, { relationshipId: invite.relationshipId });
+  if (!rel) return notFound("Relationship not found");
+  if (rel.userAId === user.userId) return badRequest("You created this relationship");
+
+  const already = await get(T.relationshipMembers, {
+    userId: user.userId,
+    relationshipId: rel.relationshipId,
+  });
+  if (!already) {
+    if (rel.userBId && rel.userBId !== user.userId) {
+      return badRequest("This relationship already has two members");
+    }
+    await put(T.relationshipMembers, {
+      userId: user.userId,
+      relationshipId: rel.relationshipId,
+      role: "member",
+      joinedAt: isoNow(),
+    });
+    await update(
+      T.relationships,
+      { relationshipId: rel.relationshipId },
+      {
+        UpdateExpression: "SET userBId = :u, updatedAt = :now",
+        ExpressionAttributeValues: { ":u": user.userId, ":now": isoNow() },
+      }
+    );
+  }
+  // Mark single-use.
+  await update(
+    T.relationshipInvites,
+    { inviteId: params.inviteId },
+    {
+      UpdateExpression: "SET #s = :a, acceptedBy = :u, acceptedAt = :now",
+      ExpressionAttributeNames: { "#s": "status" },
+      ExpressionAttributeValues: {
+        ":a": "accepted",
+        ":u": user.userId,
+        ":now": isoNow(),
+      },
+    }
+  );
+  return ok({ relationship: { ...rel, userBId: rel.userBId || user.userId } });
+});
+
+// --- threads ----------------------------------------------------------------
+
+router.post("/relationships/:rid/threads", async ({ event, params, body }) => {
+  const user = await caller(event);
+  await assertMember(user.userId, params.rid);
+  const thread = {
+    relationshipId: params.rid,
+    threadId: newId("thr"),
+    name: (body.name || "Untitled").toString(),
+    goal: body.goal ? body.goal.toString() : null,
+    status: "calm",
+    safetyState: "calm",
+    createdAt: isoNow(),
+    lastActivityAt: isoNow(),
+  };
+  await put(T.threads, thread);
+  return ok({ thread });
+});
+
+router.get("/relationships/:rid/threads", async ({ event, params }) => {
+  const user = await caller(event);
+  await assertMember(user.userId, params.rid);
+  const threads = await query(T.threads, {
+    KeyConditionExpression: "relationshipId = :r",
+    ExpressionAttributeValues: { ":r": params.rid },
+  });
+  return ok({ threads });
+});
+
+// --- messages (shared, sent-only) -------------------------------------------
+
+router.get(
+  "/relationships/:rid/threads/:tid/messages",
+  async ({ event, params }) => {
+    const user = await caller(event);
+    await assertMember(user.userId, params.rid);
+    const thread = await get(T.threads, {
+      relationshipId: params.rid,
+      threadId: params.tid,
+    });
+    if (!thread) return notFound("Thread not found");
+    const messages = await listSharedMessages(params.tid, 200);
+    return ok({
+      messages,
+      safetyState: thread.safetyState || "calm",
+      threadStatus: thread.status || "calm",
+    });
+  }
+);
+
+// --- private draft (owner-only; access.js guards private reads elsewhere) ----
+
+router.get(
+  "/relationships/:rid/threads/:tid/draft",
+  async ({ event, params }) => {
+    const user = await caller(event);
+    await assertMember(user.userId, params.rid);
+    const draft = await get(T.drafts, { userId: user.userId, threadId: params.tid });
+    return ok({ draft: draft || null });
+  }
+);
+
+router.post(
+  "/relationships/:rid/threads/:tid/draft",
+  async ({ event, params, body }) => {
+    const user = await caller(event);
+    await assertMember(user.userId, params.rid);
+    await put(T.drafts, {
+      userId: user.userId,
+      threadId: params.tid,
+      text: (body.text || "").toString(),
+      updatedAt: isoNow(),
+    });
+    return ok({ ok: true });
+  }
+);
+
+// --- send pipeline + safety hard-stop ---------------------------------------
+
+router.post(
+  "/relationships/:rid/threads/:tid/send",
+  async ({ event, params, body }) => {
+    const user = await caller(event);
+    await assertMember(user.userId, params.rid);
+
+    const thread = await get(T.threads, {
+      relationshipId: params.rid,
+      threadId: params.tid,
+    });
+    if (!thread) return notFound("Thread not found");
+    if (thread.safetyState === "ended") {
+      return ok({ status: "ended", safetyMessage: SAFETY_MESSAGE });
+    }
+
+    const text = (body.text || "").toString().trim();
+    if (!text) return badRequest("Message text required");
+
+    // 1. Safety classify (fast model) with a little thread context.
+    const recent = await listSharedMessages(params.tid, 8);
+    const recentContext = recent
+      .map((m) => `[${m.senderId === user.userId ? "me" : "partner"}] ${m.text}`)
+      .join("\n");
+    const verdict = await classifyMessage({
+      text,
+      recentContext,
+      userId: user.userId,
+    });
+
+    if (verdict.danger) {
+      await update(
+        T.threads,
+        { relationshipId: params.rid, threadId: params.tid },
+        {
+          UpdateExpression: "SET safetyState = :e, updatedAt = :now",
+          ExpressionAttributeValues: { ":e": "ended", ":now": isoNow() },
+        }
+      );
+      await put(T.safetyEvents, {
+        relationshipId: params.rid,
+        ts: isoNow(),
+        threadId: params.tid,
+        userId: user.userId,
+        category: verdict.category,
+        rationale: verdict.rationale,
+      });
+      return ok({ status: "ended", safetyMessage: SAFETY_MESSAGE });
+    }
+
+    // 2. Safe — write the message atomically iff the thread is not 'ended'.
+    //    The conditional Update closes the race with a concurrent safety stop
+    //    (DDB has no cross-table transaction otherwise). Failure mode #2.
+    const ts = isoNow();
+    const messageRow = {
+      threadId: params.tid,
+      ts,
+      messageId: newId("msg"),
+      relationshipId: params.rid,
+      senderId: user.userId,
+      text,
+    };
+    try {
+      await transactWrite([
+        {
+          Update: {
+            TableName: T.threads,
+            Key: { relationshipId: params.rid, threadId: params.tid },
+            UpdateExpression: "SET lastActivityAt = :now",
+            ConditionExpression:
+              "attribute_exists(relationshipId) AND safetyState <> :ended",
+            ExpressionAttributeValues: { ":now": ts, ":ended": "ended" },
+          },
+        },
+        { Put: { TableName: T.messages, Item: messageRow } },
+      ]);
+    } catch (e) {
+      if (isConditionalCancel(e)) {
+        return ok({ status: "ended", safetyMessage: SAFETY_MESSAGE });
+      }
+      throw e;
+    }
+
+    // Clear the now-sent private draft (best-effort).
+    try {
+      await del(T.drafts, { userId: user.userId, threadId: params.tid });
+    } catch (_) {
+      /* non-fatal */
+    }
+
+    return ok({ status: "sent", message: messageRow });
+  }
+);
+
+exports.handler = async (event) => router.handle(event);

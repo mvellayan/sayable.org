@@ -1,5 +1,5 @@
-// REST client for the API Gateway endpoints. Streaming chat lives in chatStream.js
-// because it uses the Lambda function URL directly, not API Gateway.
+// REST client for the API Gateway endpoints. Private draft-review streaming
+// lives in coachStream.js (Lambda function URL, not API Gateway).
 
 const BASE = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -45,39 +45,36 @@ async function request(path, opts = {}) {
 }
 
 export const api = {
+  // auth
   requestOtp: (email) => request("/auth/request-otp", { method: "POST", body: { email } }),
   signup: (body) => request("/auth/signup", { method: "POST", body }),
   verifyOtp: (email, code) =>
     request("/auth/verify-otp", { method: "POST", body: { email, code } }),
   me: () => request("/auth/me"),
 
-  characters: () => request("/characters"),
-  messages: (opts = {}) => {
-    const qs = new URLSearchParams(opts).toString();
-    return request(`/messages${qs ? `?${qs}` : ""}`);
-  },
-  postMessage: (text) =>
-    request("/messages", { method: "POST", body: { text } }),
+  // relationships
+  relationships: () => request("/relationships"),
+  createRelationship: (body) => request("/relationships", { method: "POST", body }),
+  createInvite: (rid) => request(`/relationships/${rid}/invite`, { method: "POST" }),
+  acceptInvite: (inviteId) =>
+    request(`/invites/${inviteId}/accept`, { method: "POST" }),
 
-  uploadAvatar: async (file) => {
-    const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-    const { uploadUrl, avatarUrl } = await request("/me/avatar-upload-url", {
+  // threads
+  threads: (rid) => request(`/relationships/${rid}/threads`),
+  createThread: (rid, body) =>
+    request(`/relationships/${rid}/threads`, { method: "POST", body }),
+
+  // messages + draft + send
+  messages: (rid, tid) => request(`/relationships/${rid}/threads/${tid}/messages`),
+  getDraft: (rid, tid) => request(`/relationships/${rid}/threads/${tid}/draft`),
+  saveDraft: (rid, tid, text) =>
+    request(`/relationships/${rid}/threads/${tid}/draft`, {
       method: "POST",
-      body: { ext },
-    });
-    await fetch(uploadUrl, {
-      method: "PUT",
-      headers: { "content-type": file.type },
-      body: file,
-    });
-    return avatarUrl;
-  },
-
-  // admin
-  adminMembers: () => request("/admin/members"),
-  adminApprove: (id) =>
-    request(`/admin/members/${id}/approve`, { method: "POST" }),
-  adminDeny: (id) =>
-    request(`/admin/members/${id}/deny`, { method: "POST" }),
-  adminUsage: () => request("/admin/usage"),
+      body: { text },
+    }),
+  send: (rid, tid, text) =>
+    request(`/relationships/${rid}/threads/${tid}/send`, {
+      method: "POST",
+      body: { text },
+    }),
 };

@@ -11,10 +11,10 @@ export default defineConfig({
       manifest: {
         name: "BetterVibe",
         short_name: "BetterVibe",
-        description: "A room of characters who feel alive.",
-        // Light cream — matches DESIGN.md light-mode background.
-        theme_color: "#F4EDDD",
-        background_color: "#F4EDDD",
+        description: "Say the hard thing so it can actually be heard.",
+        // Warm paper — matches DESIGN.md light-mode background.
+        theme_color: "#F6F2EA",
+        background_color: "#F6F2EA",
         display: "standalone",
         start_url: "/",
         icons: [

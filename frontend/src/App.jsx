@@ -1,10 +1,12 @@
 import React from "react";
+import { Routes, Route } from "react-router-dom";
 import { useAuth } from "./auth";
 import SignIn from "./components/SignIn";
-import ChatPage from "./components/ChatPage";
+import Home from "./components/Home";
+import InviteAccept from "./components/InviteAccept";
 
 export default function App() {
-  const { token, member, loading } = useAuth();
+  const { token, user, loading } = useAuth();
 
   if (loading) {
     return (
@@ -15,9 +17,14 @@ export default function App() {
     );
   }
 
-  if (!token || !member) {
-    return <SignIn />;
-  }
+  const authed = token && user;
 
-  return <ChatPage />;
+  // The invite URL persists across sign-in: a logged-out user who taps an invite
+  // link sees SignIn, then lands back on /invite/:id (InviteAccept) once authed.
+  return (
+    <Routes>
+      <Route path="/invite/:inviteId" element={authed ? <InviteAccept /> : <SignIn />} />
+      <Route path="*" element={authed ? <Home /> : <SignIn />} />
+    </Routes>
+  );
 }

@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+infra/node_modules/
+
+# Build output
+dist/
+frontend/dist/
+backend/dist/
+*.tsbuildinfo
+.vite/
+
+# CDK
+infra/cdk.out/
+
+# Environment
+.env
+.env.local
+.env.*.local
+aws/.env
+
+# OS / editor
+.DS_Store
+*.log
+
+# Claude Code (per-machine settings only)
+.claude/settings.local.json
+.gstack/
+
+# Per-user character dossiers post-tuning (committed to repo separately if desired)
+admin/dossiers.local.json
+
+# Generated character avatars (large, regenerated as needed)
+frontend/public/avatars/characters/*.png
+!frontend/public/avatars/characters/.gitkeep

@@ -1,4 +1,4 @@
-# Coupling
+# BetterVibe
 
 **Say the hard thing so it can actually be heard.**
 
@@ -10,7 +10,7 @@ Better words for the conversations that matter.
 
 ## What it is
 
-Coupling is an AI-assisted communication app for emotionally important conversations.
+BetterVibe is an AI-assisted communication app for emotionally important conversations.
 It helps people say hard things in a way the other person can actually hear. It works
 like a normal chat app with a quiet emotional intelligence layer.
 
@@ -27,7 +27,7 @@ The AI surfaces only when it has a useful nudge.
 
 ## Key product principle
 
-**Coupling should reduce emotional load, not add process load.**
+**BetterVibe should reduce emotional load, not add process load.**
 
 It should feel like *a normal chat app with a quiet emotional intelligence layer* — not
 a therapy app, not a worksheet. See [`docs/00-overview.md`](docs/00-overview.md) for the
@@ -65,3 +65,27 @@ Short version:
    status indicators, misunderstanding detection.
 3. **Memory and warmth** — communication profiles, pattern memory, repair, appreciation.
 4. **Operate it** — cost control, admin, feedback.
+
+## Provenance
+
+The AWS scaffold (`backend/`, `infra/`, `frontend/`, `aws/`, `admin/`) was copied from
+the `gatsby` project and adapted. See [`NOTICE.md`](./NOTICE.md) for full attribution and
+what is original to BetterVibe.
+
+## Layout
+
+```
+aws/        deploy scripts (create, redeploy, status, destroy, etc.) — driven by aws/.env
+backend/    Node 20 Lambda (handlers + lib + ai)
+frontend/   React + Vite PWA
+infra/      AWS CDK v2 stack (DynamoDB, Lambda, CloudFront, Route53, SES)
+admin/      operator scripts
+docs/       product spec (20 sections)
+```
+
+## Quick start (once code is adapted — see eng-review architecture doc)
+
+```bash
+cp aws/env.example aws/.env   # edit for your account
+./aws/create.sh               # provisions the stack; prompts for the Anthropic key
+```

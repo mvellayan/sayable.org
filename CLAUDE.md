@@ -1,4 +1,4 @@
-# Coupling — Claude Code working notes
+# BetterVibe — Claude Code working notes
 
 AI-assisted communication app for emotionally important conversations. "Say the hard
 thing so it can actually be heard." React PWA + Node 20 Lambda + DynamoDB + Anthropic,
@@ -22,7 +22,7 @@ explicit user approval. In QA mode, flag any code that doesn't match `DESIGN.md`
 Specifically refuse to ship: messages in a sans/system font (messages use Newsreader
 serif), alarm red anywhere, blue/purple gradients, loud rounded chat bubbles, the AI
 layer styled as loudly as human messages, 3-column icon-circle grids, `system-ui` as a
-primary font, or any carry-over of gatsby's 1920s aesthetic (Coupling forks the scaffold,
+primary font, or any carry-over of gatsby's 1920s aesthetic (BetterVibe forks the scaffold,
 not the skin).
 
 ## Architecture (locked, see eng-review doc)

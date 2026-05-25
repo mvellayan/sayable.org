@@ -32,7 +32,7 @@ When the app detects dangerous escalation, it stops normal coaching.
 
 **Example safety message:**
 
-> This conversation appears to have escalated into a safety concern. Coupling cannot
+> This conversation appears to have escalated into a safety concern. BetterVibe cannot
 > continue coaching or sending messages in this thread. If anyone is in immediate
 > danger, call emergency services such as 911. Consider pausing this conversation and
 > seeking real-world help.

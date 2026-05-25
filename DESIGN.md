@@ -1,4 +1,4 @@
-# Design System — Coupling
+# Design System — BetterVibe
 
 Memorable thing: **"Finally, I feel heard."**
 The words are sacred. The human is centered. The interface's job is to get out of the
@@ -21,7 +21,7 @@ Created by /design-consultation on 2026-05-25.
 - **Decoration level:** Minimal. Type and whitespace do the work.
 - **Mood:** Calm, private, trustworthy, human. Never clinical (therapy app), never
   corporate SaaS, never alarmed (fight app), never a Gatsby 1920s pastiche.
-- **Explicitly NOT:** gatsby's aesthetic. Coupling copies gatsby's *scaffold*, never its
+- **Explicitly NOT:** gatsby's aesthetic. BetterVibe copies gatsby's *scaffold*, never its
   *skin* (no Fraunces/General Sans, no 1920s motifs, no green-light symbolism).
 
 ## Typography
@@ -41,7 +41,7 @@ The words are the product. Two real typefaces (never Inter / Roboto / system sta
 
 ## Color
 Warm paper, zero blue, zero red. Communication/AI apps default to clinical blue or alarm
-red; Coupling refuses both. Warm = held and human; the absence of red matters because
+red; BetterVibe refuses both. Warm = held and human; the absence of red matters because
 this app handles conflict and must never scream alarm.
 
 | Token | Light | Role |
@@ -99,4 +99,4 @@ loud chat bubbles · the AI styled as loudly as the humans.
 | 2026-05-25 | Messages set in Newsreader (serif) | Each message reads like a considered letter — the core differentiator |
 | 2026-05-25 | Warm paper + clay; no blue, no red | Human/held, never clinical or alarmed; red would scream during conflict |
 | 2026-05-25 | AI layer typographically recessive | The "quiet emotional-intelligence layer" must look quiet, never compete with human voices |
-| 2026-05-25 | Reject gatsby's skin | Coupling forks gatsby's scaffold only; its own identity, no 1920s motifs |
+| 2026-05-25 | Reject gatsby's skin | BetterVibe forks gatsby's scaffold only; its own identity, no 1920s motifs |

@@ -2,7 +2,7 @@
 
 ## Product definition
 
-**Coupling is an AI-assisted communication app for emotionally important conversations.
+**BetterVibe is an AI-assisted communication app for emotionally important conversations.
 It helps people say hard things in a way the other person can actually hear. It works
 like a normal chat app with a quiet emotional intelligence layer.**
 
@@ -19,7 +19,7 @@ The AI should surface only when it has a useful nudge.
 
 ## Key product principle
 
-**Coupling should reduce emotional load, not add process load.**
+**BetterVibe should reduce emotional load, not add process load.**
 
 That means:
 

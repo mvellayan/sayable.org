@@ -53,7 +53,7 @@ function ensureModel(byModel, model) {
 async function recordUsage({ memberId, model, usage }) {
   if (!memberId || !usage) return;
   try {
-    const member = await get(T.members, { memberId });
+    const member = await get(T.users, { userId: memberId });
     if (!member) return;
 
     const u = member.usage || emptyUsage();
@@ -78,7 +78,7 @@ async function recordUsage({ memberId, model, usage }) {
     m.callCount += 1;
     m.costUsd += cost;
 
-    await put(T.members, { ...member, usage: u });
+    await put(T.users, { ...member, usage: u });
   } catch (e) {
     // Never block the API call on usage accounting.
     console.error("usage_record_failed", { memberId, model, error: e?.message });
@@ -86,12 +86,12 @@ async function recordUsage({ memberId, model, usage }) {
 }
 
 async function resetUsage(memberId) {
-  const member = await get(T.members, { memberId });
+  const member = await get(T.users, { userId: memberId });
   if (!member) return null;
   const reset = emptyUsage();
   reset.resetAt = new Date().toISOString();
   const merged = { ...member, usage: reset };
-  await put(T.members, merged);
+  await put(T.users, merged);
   return merged;
 }
 

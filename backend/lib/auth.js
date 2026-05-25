@@ -16,10 +16,10 @@ async function getCallerFromEvent(event) {
     return null;
   }
   if (!claims || !claims.sub) return null;
-  const member = await get(T.members, { memberId: claims.sub });
-  if (!member) return null;
-  if (member.status !== "active") return null;
-  return { member, claims };
+  const user = await get(T.users, { userId: claims.sub });
+  if (!user) return null;
+  if (user.status !== "active") return null;
+  return { user, claims };
 }
 
 function requireAuth(caller) {
@@ -32,7 +32,7 @@ function requireAuth(caller) {
 
 function requireAdmin(caller) {
   requireAuth(caller);
-  if (caller.member.role !== "admin") {
+  if (caller.user.role !== "admin") {
     const e = new Error("Admin required");
     e.statusCode = 403;
     throw e;

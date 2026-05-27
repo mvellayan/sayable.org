@@ -20,12 +20,12 @@ export default function InviteAccept() {
 
   return (
     <div className="auth">
-      <h1 className="auth__brand">BetterVibe</h1>
+      <h1 className="auth__brand">Sayable</h1>
       {state === "accepting" && <div className="auth__status">Connecting you…</div>}
       {state === "done" && (
         <>
           <p className="auth__tagline">You're connected.</p>
-          <button className="auth__button" onClick={() => nav("/")}>Open BetterVibe</button>
+          <button className="auth__button" onClick={() => nav("/")}>Open Sayable</button>
         </>
       )}
       {state === "error" && (

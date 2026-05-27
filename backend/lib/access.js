@@ -1,7 +1,7 @@
 "use strict";
 
 // =============================================================================
-// access.js — THE privacy boundary. (BetterVibe original; not from gatsby.)
+// access.js — THE privacy boundary. (Sayable original; not from gatsby.)
 //
 // DynamoDB has no row-level security, so the private/shared boundary is enforced
 // here, in application code, and NOWHERE else. This module is the ONLY place

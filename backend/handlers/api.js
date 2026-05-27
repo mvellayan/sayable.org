@@ -1,7 +1,7 @@
 "use strict";
 
 // Derived from the gatsby scaffold (Development/gatsby); see NOTICE.md.
-// BetterVibe REST API (apiFn). Multi-tenant relationships/threads/messages and
+// Sayable REST API (apiFn). Multi-tenant relationships/threads/messages and
 // the send pipeline with the safety hard-stop. Private draft review streaming
 // lives in handlers/coach.js (separate Lambda function URL — streaming).
 //

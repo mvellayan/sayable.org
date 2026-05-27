@@ -1,6 +1,6 @@
 # 04 — Repair, Appreciation & Offline Suggestions
 
-The features that keep BetterVibe from becoming "the fight app" — repair-oriented
+The features that keep Sayable from becoming "the fight app" — repair-oriented
 communication, positive communication, and knowing when to leave the app entirely.
 
 ---
@@ -27,7 +27,7 @@ This should be core, not secondary.
 
 ## 12. Appreciation and Positive Communication
 
-BetterVibe should not only be used during conflict.
+Sayable should not only be used during conflict.
 
 **It should support:**
 

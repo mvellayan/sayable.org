@@ -65,7 +65,7 @@ export default function Home() {
   return (
     <div className="app">
       <div className="topbar">
-        <h1 className="topbar__brand">BetterVibe</h1>
+        <h1 className="topbar__brand">Sayable</h1>
         <button className="topbar__link" onClick={signout}>sign out</button>
       </div>
       <div className="home">

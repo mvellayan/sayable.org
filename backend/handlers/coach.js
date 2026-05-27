@@ -1,7 +1,7 @@
 "use strict";
 
 // Derived from the gatsby scaffold (Development/gatsby) streaming pattern; see
-// NOTICE.md. BetterVibe coachFn: the PRIVATE draft-review stream (My Coach).
+// NOTICE.md. Sayable coachFn: the PRIVATE draft-review stream (My Coach).
 // Lambda function URL with RESPONSE_STREAM — streams ONLY to the requesting
 // user. Context is assembled through lib/access.buildCoachContext so the
 // partner's private data is never in scope.

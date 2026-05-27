@@ -1,18 +1,21 @@
-# BetterVibe — Claude Code working notes
+# Sayable — Claude Code working notes
 
 AI-assisted communication app for emotionally important conversations. "Say the hard
-thing so it can actually be heard." React PWA + Node 20 Lambda + DynamoDB + Anthropic,
-deployed to `bettervibe.live`. Forked from the gatsby scaffold (see NOTICE.md once added).
+thing so it can actually be heard." Two people text inside the app; three agents help
+(a private coach per person + a shared neutral moderator). React PWA + Node 20 Lambda +
+DynamoDB + Anthropic, deployed to `sayable.org`. Forked from the gatsby scaffold (see NOTICE.md).
 
 ## Source-of-truth documents
 - **`DESIGN.md`** — design system. Read before any visual or UI work. Memorable thing:
   "Finally, I feel heard."
 - **`docs/`** — full product spec (20 sections, grouped by domain).
-- **`~/.gstack/projects/bettervibe/muthu-main-eng-review-architecture-20260525-111702.md`**
-  — locked engineering architecture: 16-table DynamoDB schema, app-layer privacy boundary,
-  send pipeline + safety, AWS/CDK stack, build order.
-- **`~/.gstack/projects/bettervibe/muthu-nobranch-design-20260525-103508.md`** — product
-  design doc (office-hours).
+- **Design doc (current):** `muthu-main-design-20260527-141304.md` in the gstack project
+  dir (`~/.gstack/projects/<gstack-slug>/` — run `gstack-slug` to resolve; it changed with
+  the repo rename). The sayable.org re-lock: three-agent two-sided texting, the Approach C
+  turn-gated send pipeline, scope decisions, and the review report. Supersedes the
+  couples-first design.
+- **Companions in the same dir:** `*-eng-review-architecture-*.md` (16-table DynamoDB
+  schema, app-layer privacy boundary, AWS/CDK stack) and `*-eng-review-test-plan-*.md`.
 
 ## Design System
 Always read `DESIGN.md` before making any visual or UI decisions. All font choices,
@@ -22,7 +25,7 @@ explicit user approval. In QA mode, flag any code that doesn't match `DESIGN.md`
 Specifically refuse to ship: messages in a sans/system font (messages use Newsreader
 serif), alarm red anywhere, blue/purple gradients, loud rounded chat bubbles, the AI
 layer styled as loudly as human messages, 3-column icon-circle grids, `system-ui` as a
-primary font, or any carry-over of gatsby's 1920s aesthetic (BetterVibe forks the scaffold,
+primary font, or any carry-over of gatsby's 1920s aesthetic (Sayable forks the scaffold,
 not the skin).
 
 ## Architecture (locked, see eng-review doc)
@@ -31,7 +34,7 @@ not the skin).
   `buildMediatorContext` are the only LLM-context assemblers; nothing else reads private
   tables. Heaviest tests live here.
 - Realtime: short-poll. Onboarding: open signup + partner invite link. Domain: apex
-  bettervibe.live.
+  sayable.org.
 
 ## Skill routing
 When the user's request matches an available skill, invoke it via the Skill tool.

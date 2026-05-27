@@ -11,7 +11,7 @@ export default function App() {
   if (loading) {
     return (
       <div className="auth">
-        <h1 className="auth__brand">BetterVibe</h1>
+        <h1 className="auth__brand">Sayable</h1>
         <div className="auth__status">…</div>
       </div>
     );

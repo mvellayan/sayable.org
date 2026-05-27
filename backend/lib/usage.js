@@ -48,7 +48,7 @@ function ensureModel(byModel, model) {
 
 // Read-modify-write update on the member row. At our scale (5-10 users, AI calls
 // happen in serial within a user session) the race window is negligible. If we
-// outgrow this we can switch to a separate BetterVibeUsage table or atomic ADDs on
+// outgrow this we can switch to a separate SayableUsage table or atomic ADDs on
 // flat top-level numeric attributes.
 async function recordUsage({ memberId, model, usage }) {
   if (!memberId || !usage) return;

@@ -9,8 +9,8 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["icon-180.png"],
       manifest: {
-        name: "BetterVibe",
-        short_name: "BetterVibe",
+        name: "Sayable",
+        short_name: "Sayable",
         description: "Say the hard thing so it can actually be heard.",
         // Warm paper — matches DESIGN.md light-mode background.
         theme_color: "#F6F2EA",

@@ -1,6 +1,6 @@
 "use strict";
 
-// BetterVibe original (not from gatsby). The private coach: My Coach reviews
+// Sayable original (not from gatsby). The private coach: My Coach reviews
 // the drafting user's message before they send it; Their Coach helps the
 // receiver interpret a message. Streams prose so the review feels alive.
 //

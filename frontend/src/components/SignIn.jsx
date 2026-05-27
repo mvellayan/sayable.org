@@ -68,7 +68,7 @@ export default function SignIn() {
 
   return (
     <div className="auth">
-      <h1 className="auth__brand">BetterVibe</h1>
+      <h1 className="auth__brand">Sayable</h1>
       <p className="auth__tagline">Say the hard thing so it can actually be heard.</p>
 
       {stage === "email" && (

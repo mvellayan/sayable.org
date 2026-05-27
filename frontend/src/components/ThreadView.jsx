@@ -4,7 +4,7 @@ import { useAuth } from "../auth";
 import { openCoachStream } from "../coachStream";
 
 const DEFAULT_SAFETY =
-  "This conversation appears to have escalated into a safety concern. BetterVibe " +
+  "This conversation appears to have escalated into a safety concern. Sayable " +
   "cannot continue coaching or sending messages in this thread. If anyone is in " +
   "immediate danger, call emergency services such as 911. Consider pausing this " +
   "conversation and seeking real-world help.";

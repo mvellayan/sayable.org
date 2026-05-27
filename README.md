@@ -1,16 +1,16 @@
-# BetterVibe
+# Sayable
 
 **Say the hard thing so it can actually be heard.**
 
 Better words for the conversations that matter.
 
-`bettervibe.live`
+`sayable.org`
 
 ---
 
 ## What it is
 
-BetterVibe is an AI-assisted communication app for emotionally important conversations.
+Sayable is an AI-assisted communication app for emotionally important conversations.
 It helps people say hard things in a way the other person can actually hear. It works
 like a normal chat app with a quiet emotional intelligence layer.
 
@@ -27,7 +27,7 @@ The AI surfaces only when it has a useful nudge.
 
 ## Key product principle
 
-**BetterVibe should reduce emotional load, not add process load.**
+**Sayable should reduce emotional load, not add process load.**
 
 It should feel like *a normal chat app with a quiet emotional intelligence layer* — not
 a therapy app, not a worksheet. See [`docs/00-overview.md`](docs/00-overview.md) for the
@@ -70,7 +70,7 @@ Short version:
 
 The AWS scaffold (`backend/`, `infra/`, `frontend/`, `aws/`, `admin/`) was copied from
 the `gatsby` project and adapted. See [`NOTICE.md`](./NOTICE.md) for full attribution and
-what is original to BetterVibe.
+what is original to Sayable.
 
 ## Layout
 

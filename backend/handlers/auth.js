@@ -1,7 +1,7 @@
 "use strict";
 
 // Derived from the gatsby scaffold (Development/gatsby); see NOTICE.md.
-// Adapted for BetterVibe: multi-tenant Users (not a closed Members list) and
+// Adapted for Sayable: multi-tenant Users (not a closed Members list) and
 // OPEN signup (no admin-approval gate — anyone can sign up; partners pair into
 // relationships separately via invite links handled in handlers/api.js).
 

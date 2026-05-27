@@ -51,7 +51,7 @@ if [ "$MODE" = "all" ] || [ "$MODE" = "frontend" ]; then
     npm install --silent
     VITE_API_BASE_URL="$API_URL" \
     VITE_COACH_STREAM_URL="$(stack_output CoachStreamUrl)" \
-    VITE_APP_NAME="${APP_BRAND:-BetterVibe}" \
+    VITE_APP_NAME="${APP_BRAND:-Sayable}" \
     npm run build
   )
   info "Syncing frontend to s3://$FRONTEND_BUCKET ..."

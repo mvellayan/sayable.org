@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Delete all AWS resources created by the BetterVibe stack.
+# Delete all AWS resources created by the Sayable stack.
 # This script is destructive. It will:
 #   • empty and delete the frontend bucket
-#   • drop all DynamoDB tables (BetterVibe*)
+#   • drop all DynamoDB tables (Sayable*)
 #   • remove Lambda functions, API Gateway, CloudFront distribution
 #   • remove the Route 53 alias records created by this stack
 #   • delete the JWT and Anthropic-API-key secrets

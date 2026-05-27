@@ -1,8 +1,8 @@
 {
-  "name": "bettervibe-backend",
+  "name": "sayable-backend",
   "version": "0.1.0",
   "private": true,
-  "description": "BetterVibe Lambda backend (auth + api + streaming chat).",
+  "description": "Sayable Lambda backend (auth + api + streaming chat).",
   "main": "handlers/api.js",
   "scripts": {
     "test": "node --test"

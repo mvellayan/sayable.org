@@ -1,8 +1,8 @@
 {
-  "name": "bettervibe-admin",
+  "name": "sayable-admin",
   "version": "0.1.0",
   "private": true,
-  "description": "Operator scripts for BetterVibe. Run on your laptop with AWS + LLM creds.",
+  "description": "Operator scripts for Sayable. Run on your laptop with AWS + LLM creds.",
   "scripts": {
     "bootstrap-characters": "ts-node --prefer-ts-exts bootstrap-characters.ts",
     "generate-avatars": "ts-node --prefer-ts-exts generate-character-avatars.ts",

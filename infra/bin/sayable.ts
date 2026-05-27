@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 import "source-map-support/register";
 import * as cdk from "aws-cdk-lib";
-import { BetterVibeStack } from "../lib/bettervibe-stack";
+import { SayableStack } from "../lib/sayable-stack";
 
 const app = new cdk.App();
 
-const rootDomain = process.env.ROOT_DOMAIN ?? "bettervibe.live";
-const appDomain = process.env.APP_DOMAIN ?? "bettervibe.live";
+const rootDomain = process.env.ROOT_DOMAIN ?? "sayable.org";
+const appDomain = process.env.APP_DOMAIN ?? "sayable.org";
 
 const otpSenderEmail =
   process.env.OTP_SENDER_EMAIL ?? "muthu.vellayan@nayalle.com";
@@ -15,7 +15,7 @@ const notificationSenderEmail =
 
 const ownerEmail = process.env.OWNER_EMAIL ?? "muthu.vellayan@gmail.com";
 
-new BetterVibeStack(app, "BetterVibeStack", {
+new SayableStack(app, "SayableStack", {
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION ?? "us-east-1",
@@ -24,6 +24,6 @@ new BetterVibeStack(app, "BetterVibeStack", {
   appDomain,
   otpSenderEmail,
   notificationSenderEmail,
-  appBrand: process.env.APP_BRAND ?? "BetterVibe",
+  appBrand: process.env.APP_BRAND ?? "Sayable",
   ownerEmail,
 });

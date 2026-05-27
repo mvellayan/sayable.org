@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tail CloudWatch logs for a BetterVibe Lambda function.
+# Tail CloudWatch logs for a Sayable Lambda function.
 # Usage: show_log.sh [auth|api|daily-mailer] [--since 10m]
 
 set -euo pipefail
@@ -13,9 +13,9 @@ NAME="${1:-api}"
 SINCE_VAL="${2:-15m}"
 
 case "$NAME" in
-  auth)            FN="bettervibe-auth" ;;
-  api)             FN="bettervibe-api" ;;
-  daily|daily-mailer|dailymailer|mailer) FN="bettervibe-dailymailer" ;;
+  auth)            FN="sayable-auth" ;;
+  api)             FN="sayable-api" ;;
+  daily|daily-mailer|dailymailer|mailer) FN="sayable-dailymailer" ;;
   *)               FN="$NAME" ;;
 esac
 

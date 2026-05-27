@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Show the current state of the deployed BetterVibe stack.
+# Show the current state of the deployed Sayable stack.
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -34,11 +34,11 @@ aws cloudformation describe-stacks \
 echo
 echo "DynamoDB tables:"
 aws dynamodb list-tables --region "$AWS_REGION" --output json | \
-  python3 -c "import sys,json; ts=json.load(sys.stdin)['TableNames']; [print('  '+t) for t in ts if t.startswith('BetterVibe')]"
+  python3 -c "import sys,json; ts=json.load(sys.stdin)['TableNames']; [print('  '+t) for t in ts if t.startswith('Sayable')]"
 
 echo
 echo "Lambda functions:"
-for fn in bettervibe-auth bettervibe-api bettervibe-dailymailer; do
+for fn in sayable-auth sayable-api sayable-dailymailer; do
   state="$(aws lambda get-function --region "$AWS_REGION" --function-name "$fn" \
     --query "Configuration.[State,LastUpdateStatus]" --output text 2>/dev/null || echo "missing")"
   echo "  $fn  $state"

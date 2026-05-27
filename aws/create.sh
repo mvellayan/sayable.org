@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Provision all AWS resources for BetterVibe.
+# Provision all AWS resources for Sayable.
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -22,7 +22,7 @@ if ! aws route53 list-hosted-zones-by-name \
       --output text 2>/dev/null | grep -q "^$ROOT_DOMAIN"; then
   warn "Route 53 hosted zone for $ROOT_DOMAIN was not found in this account."
   warn "Create the zone (or transfer the domain to Route 53) before continuing."
-  warn "If you registered bettervibe.bettervibe.live through Route 53, the zone should already exist."
+  warn "If you registered sayable.org through Route 53, the zone should already exist."
   confirm "Continue anyway? (y/N)" "y"
 fi
 
@@ -34,7 +34,7 @@ if ! aws ses get-identity-verification-attributes \
       --output text 2>/dev/null | grep -q Success; then
   warn "SES sender $OTP_SENDER_EMAIL is not verified in $AWS_REGION."
   warn "Run: aws ses verify-email-identity --email-address $OTP_SENDER_EMAIL --region $AWS_REGION"
-  warn "Then click the verification link before signing in to BetterVibe."
+  warn "Then click the verification link before signing in to Sayable."
 fi
 
 info "Installing backend dependencies (for Lambda asset)..."

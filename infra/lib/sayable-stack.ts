@@ -1,5 +1,5 @@
 // Derived from the gatsby scaffold (Development/gatsby); see NOTICE.md.
-// Adapted for BetterVibe: multi-tenant relationships/threads, 16-table schema,
+// Adapted for Sayable: multi-tenant relationships/threads, 16-table schema,
 // application-enforced private/shared boundary (DynamoDB has no RLS).
 import * as cdk from "aws-cdk-lib";
 import { Construct } from "constructs";
@@ -18,7 +18,7 @@ import * as route53targets from "aws-cdk-lib/aws-route53-targets";
 import * as secrets from "aws-cdk-lib/aws-secretsmanager";
 import * as path from "path";
 
-export interface BetterVibeStackProps extends cdk.StackProps {
+export interface SayableStackProps extends cdk.StackProps {
   rootDomain: string;
   appDomain: string;
   otpSenderEmail: string;
@@ -27,8 +27,8 @@ export interface BetterVibeStackProps extends cdk.StackProps {
   ownerEmail: string;
 }
 
-export class BetterVibeStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props: BetterVibeStackProps) {
+export class SayableStack extends cdk.Stack {
+  constructor(scope: Construct, id: string, props: SayableStackProps) {
     super(scope, id, props);
 
     const {
@@ -40,7 +40,7 @@ export class BetterVibeStack extends cdk.Stack {
       ownerEmail,
     } = props;
 
-    const tablePrefix = "BetterVibe";
+    const tablePrefix = "Sayable";
 
     // ---------------- DynamoDB tables ----------------
     // 16-table schema. Privacy class (PRIVATE vs SHARED) is enforced in the
@@ -167,7 +167,7 @@ export class BetterVibeStack extends cdk.Stack {
 
     // ---------------- S3 frontend bucket ----------------
     const frontendBucket = new s3.Bucket(this, "FrontendBucket", {
-      bucketName: `bettervibe-frontend-${this.account}-${this.region}`,
+      bucketName: `sayable-frontend-${this.account}-${this.region}`,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
@@ -176,7 +176,7 @@ export class BetterVibeStack extends cdk.Stack {
 
     // ---------------- Secrets ----------------
     const jwtSecret = new secrets.Secret(this, "JwtSecret", {
-      secretName: "bettervibe/jwt-secret",
+      secretName: "sayable/jwt-secret",
       generateSecretString: {
         passwordLength: 64,
         excludePunctuation: true,
@@ -184,9 +184,9 @@ export class BetterVibeStack extends cdk.Stack {
     });
 
     const anthropicSecret = new secrets.Secret(this, "AnthropicApiKey", {
-      secretName: "bettervibe/anthropic-api-key",
+      secretName: "sayable/anthropic-api-key",
       description:
-        "Anthropic API key for BetterVibe. Populate via aws/create.sh on first deploy.",
+        "Anthropic API key for Sayable. Populate via aws/create.sh on first deploy.",
       secretStringValue: cdk.SecretValue.unsafePlainText(
         "REPLACE_ME_VIA_CREATE_SH"
       ),
@@ -259,7 +259,7 @@ export class BetterVibeStack extends cdk.Stack {
       memoryMb = 512
     ) => {
       const fn = new lambda.Function(this, `${name}Fn`, {
-        functionName: `bettervibe-${name.toLowerCase()}`,
+        functionName: `sayable-${name.toLowerCase()}`,
         runtime: lambda.Runtime.NODEJS_20_X,
         handler,
         code: backendCode,
@@ -285,7 +285,7 @@ export class BetterVibeStack extends cdk.Stack {
     // Lambda function URL with RESPONSE_STREAM so the drafting user receives
     // SSE deltas. Streams ONLY to the requesting user — never broadcast.
     const coachFn = new lambda.Function(this, "CoachFn", {
-      functionName: "bettervibe-coach",
+      functionName: "sayable-coach",
       runtime: lambda.Runtime.NODEJS_20_X,
       handler: "handlers/coach.handler",
       code: backendCode,
@@ -325,7 +325,7 @@ export class BetterVibeStack extends cdk.Stack {
 
     // ---------------- HTTP API Gateway (auth + REST) ----------------
     const httpApi = new apigwv2.HttpApi(this, "HttpApi", {
-      apiName: "bettervibe-api",
+      apiName: "sayable-api",
       corsPreflight: {
         allowHeaders: ["authorization", "content-type"],
         allowMethods: [

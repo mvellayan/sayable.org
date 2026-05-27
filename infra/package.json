@@ -1,9 +1,9 @@
 {
-  "name": "bettervibe-infra",
+  "name": "sayable-infra",
   "version": "0.1.0",
   "private": true,
   "bin": {
-    "bettervibe": "bin/bettervibe.js"
+    "sayable": "bin/sayable.js"
   },
   "scripts": {
     "build": "tsc",

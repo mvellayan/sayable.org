@@ -4,7 +4,7 @@ const { SESClient, SendEmailCommand } = require("@aws-sdk/client-ses");
 
 const ses = new SESClient({});
 const BRAND = process.env.APP_BRAND || "Sayable";
-const APP_URL = process.env.APP_URL || "https://bettervibe.bettervibe.live";
+const APP_URL = process.env.APP_URL || "https://sayable.org";
 const OTP_FROM = process.env.OTP_SENDER_EMAIL;
 const NOTIFY_FROM =
   process.env.NOTIFICATION_SENDER_EMAIL || process.env.OTP_SENDER_EMAIL;

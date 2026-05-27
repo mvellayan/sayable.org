@@ -25,7 +25,7 @@ if command -v aws >/dev/null 2>&1; then
   export CDK_DEFAULT_ACCOUNT
 fi
 
-STACK_NAME="${STACK_NAME:-BetterVibeStack}"
+STACK_NAME="${STACK_NAME:-SayableStack}"
 
 color() {
   local c="$1"; shift

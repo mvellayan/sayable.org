@@ -15,9 +15,10 @@
 //   GET  /relationships/:rid/threads/:tid/messages        list/poll SENT messages
 //   GET  /relationships/:rid/threads/:tid/draft           my private draft
 //   POST /relationships/:rid/threads/:tid/draft           save my private draft
-//   POST /relationships/:rid/threads/:tid/send            send pipeline + safety
+//   POST /relationships/:rid/threads/:tid/send            two-phase send + safety
+//   POST /relationships/:rid/threads/:tid/moderator       shared moderator beat
 //
-// Deferred (later phases): profiles §1, observations/patterns §10, mediator §9,
+// Deferred (later phases): profiles §1, observations/patterns §10,
 // feedback §20, admin §19, deletion §17.
 
 const { Router } = require("../lib/router");
@@ -34,8 +35,9 @@ const {
 } = require("../lib/ddb");
 const { newId, isoNow } = require("../lib/ids");
 const { getCallerFromEvent, requireAuth } = require("../lib/auth");
-const { assertMember, listSharedMessages } = require("../lib/access");
+const { assertMember, listSharedMessages, buildMediatorContext } = require("../lib/access");
 const { classifyMessage, SAFETY_MESSAGE } = require("../ai/safety");
+const { generateBeat } = require("../ai/mediator");
 
 const router = new Router();
 
@@ -55,6 +57,10 @@ router.post("/relationships", async ({ event, body }) => {
     userAId: user.userId,
     userBId: null,
     type: (body.type || "couple").toString(),
+    // context (married / friends / family / co-parenting / ...) lives on the
+    // relationship, not the thread: it is stable across conversations with the
+    // same person, so we capture it once and never re-ask (eng-review decision 2).
+    context: body.context ? body.context.toString() : null,
     label: (body.label || "Us").toString(),
     status: "active",
     safetyState: "calm",
@@ -166,9 +172,16 @@ router.post("/relationships/:rid/threads", async ({ event, params, body }) => {
     relationshipId: params.rid,
     threadId: newId("thr"),
     name: (body.name || "Untitled").toString(),
-    goal: body.goal ? body.goal.toString() : null,
+    // purpose (argument / planning / feedback / repair / ...) is per-conversation
+    // (eng-review decision 2). Accept legacy `goal` so older clients still work.
+    purpose: body.purpose
+      ? body.purpose.toString()
+      : body.goal
+      ? body.goal.toString()
+      : null,
     status: "calm",
     safetyState: "calm",
+    msgCount: 0,
     createdAt: isoNow(),
     lastActivityAt: isoNow(),
   };
@@ -253,8 +266,21 @@ router.post(
 
     const text = (body.text || "").toString().trim();
     if (!text) return badRequest("Message text required");
+    const confirm = body.confirm === true; // second phase: user saw the review
 
-    // 1. Safety classify (fast model) with a little thread context.
+    // ── Two-phase send (eng-review decision 1B) ──────────────────────────────
+    //   phase 1 (no confirm): combined {danger, charged} classify in ONE call.
+    //       danger  → hard-stop the thread.
+    //       charged → PAUSE for the private coach review (no commit); the client
+    //                 streams the review (handlers/coach.js) then re-sends with
+    //                 confirm:true.
+    //       plain   → commit.
+    //   phase 2 (confirm:true): the user already saw the review and chose to send.
+    //       We re-classify so DANGER stays authoritative on every commit path
+    //       (a client cannot bypass safety by jumping straight to confirm) but we
+    //       do NOT re-gate on `charged` — they already reviewed. Re-classifying
+    //       (vs caching the phase-1 verdict) keeps the pipeline stateless; the
+    //       cache optimization is a deferred follow-up.
     const recent = await listSharedMessages(params.tid, 8);
     const recentContext = recent
       .map((m) => `[${m.senderId === user.userId ? "me" : "partner"}] ${m.text}`)
@@ -285,9 +311,14 @@ router.post(
       return ok({ status: "ended", safetyMessage: SAFETY_MESSAGE });
     }
 
-    // 2. Safe — write the message atomically iff the thread is not 'ended'.
-    //    The conditional Update closes the race with a concurrent safety stop
-    //    (DDB has no cross-table transaction otherwise). Failure mode #2.
+    // Send-gate: a charged message pauses for review and is NOT committed yet.
+    if (verdict.charged && !confirm) {
+      return ok({ status: "review", charged: true });
+    }
+
+    // Commit atomically iff the thread is not 'ended' (closes the race with a
+    // concurrent safety stop — DDB has no cross-table transaction otherwise).
+    // `ADD msgCount :one` drives the moderator cadence below.
     const ts = isoNow();
     const messageRow = {
       threadId: params.tid,
@@ -303,10 +334,10 @@ router.post(
           Update: {
             TableName: T.threads,
             Key: { relationshipId: params.rid, threadId: params.tid },
-            UpdateExpression: "SET lastActivityAt = :now",
+            UpdateExpression: "SET lastActivityAt = :now ADD msgCount :one",
             ConditionExpression:
               "attribute_exists(relationshipId) AND safetyState <> :ended",
-            ExpressionAttributeValues: { ":now": ts, ":ended": "ended" },
+            ExpressionAttributeValues: { ":now": ts, ":ended": "ended", ":one": 1 },
           },
         },
         { Put: { TableName: T.messages, Item: messageRow } },
@@ -325,7 +356,68 @@ router.post(
       /* non-fatal */
     }
 
+    // Moderator cadence (eng-review decision 3B): every Nth message, post a
+    // SHARED beat. Fail-open and never affects the send result — a moderator
+    // failure must not break or fail messaging (mirrors safety.js fail-open).
+    const newCount = (Number(thread.msgCount) || 0) + 1;
+    const everyN = parseInt(process.env.MODERATOR_EVERY_N || "6", 10);
+    if (everyN > 0 && newCount % everyN === 0) {
+      await postModeratorBeat(params.rid, params.tid, user.userId, thread);
+    }
+
     return ok({ status: "sent", message: messageRow });
+  }
+);
+
+// --- moderator (shared, neutral; reads SHARED data only via access.js) -------
+
+// Generates one neutral beat from SHARED context and writes it to the shared
+// mediatorSummaries table. Fail-open: any error is logged and swallowed so it
+// can never break a send (used by the auto-cadence) or 500 a request.
+async function postModeratorBeat(relationshipId, threadId, userId, thread) {
+  try {
+    const context = await buildMediatorContext(relationshipId, threadId, userId);
+    const purpose = thread.purpose || thread.goal || null;
+    const { text } = await generateBeat({ context, purpose, memberId: userId });
+    if (!text) return null;
+    const summary = {
+      threadId,
+      ts: isoNow(),
+      summaryId: newId("mod"),
+      relationshipId,
+      kind: "moderator",
+      text,
+    };
+    await put(T.mediatorSummaries, summary);
+    return summary;
+  } catch (e) {
+    console.error("moderator_beat_failed", e?.message || e);
+    return null;
+  }
+}
+
+// On-request beat ("where are we?"). Same generator, surfaced synchronously.
+router.post(
+  "/relationships/:rid/threads/:tid/moderator",
+  async ({ event, params }) => {
+    const user = await caller(event);
+    await assertMember(user.userId, params.rid);
+    const thread = await get(T.threads, {
+      relationshipId: params.rid,
+      threadId: params.tid,
+    });
+    if (!thread) return notFound("Thread not found");
+    if (thread.safetyState === "ended") {
+      return ok({ status: "ended", safetyMessage: SAFETY_MESSAGE });
+    }
+    const summary = await postModeratorBeat(
+      params.rid,
+      params.tid,
+      user.userId,
+      thread
+    );
+    if (!summary) return ok({ status: "unavailable", summary: null });
+    return ok({ status: "ok", summary });
   }
 );
 

@@ -64,11 +64,13 @@ async function coachHandler(event, responseStream) {
       write(responseStream, "error", { error: "This thread has ended." });
       return responseStream.end();
     }
-    const goal = thread ? thread.goal : null;
+    // Conversation purpose conditions the review. New threads store `purpose`;
+    // fall back to legacy `goal` for threads created before the rename.
+    const purpose = thread ? (thread.purpose || thread.goal || null) : null;
 
     write(responseStream, "review-start", {});
     let finalText = "";
-    for await (const chunk of reviewDraft({ draftText, context, goal })) {
+    for await (const chunk of reviewDraft({ draftText, context, purpose })) {
       if (chunk.type === "text_delta") {
         finalText += chunk.text;
         write(responseStream, "text-delta", { text: chunk.text });

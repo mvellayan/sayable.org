@@ -3,7 +3,7 @@ import { api, configureApi } from "./api";
 
 const AuthContext = createContext(null);
 
-const TOKEN_KEY = "bettervibe.token";
+const TOKEN_KEY = "sayable.token";
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));

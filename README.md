@@ -53,10 +53,9 @@ The functional spec is split by domain under [`docs/`](docs/):
 ## Build sequencing
 
 This spec describes the full platform. The recommended build order — get the core
-conversational loop into real use first, then layer the rest — is in the office-hours
-design doc:
-
-`~/.gstack/projects/bettervibe/muthu-nobranch-design-20260525-103508.md`
+conversational loop into real use first, then layer the rest — is in the current
+design doc (`muthu-main-design-20260527-141304.md`) in the gstack project dir
+(`~/.gstack/projects/<gstack-slug>/`; run `gstack-slug` to resolve):
 
 Short version:
 1. **The living loop** — two users, one shared thread, `My Coach` draft review, the

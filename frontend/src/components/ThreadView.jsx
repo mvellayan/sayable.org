@@ -1,7 +1,27 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { openCoachStream } from "../coachStream";
+
+// ──────────────────────────────────────────────────────────────────────────────
+// ThreadView — the two-sided conversation surface.
+//
+// Approach C send-gate (eng-review decisions 1B, 3B) drives this UI:
+//
+//   draft → Send ──┬─▶ server: plain   ──▶ committed (status: "sent")
+//                  ├─▶ server: charged ──▶ status: "review" (NOT committed)
+//                  │       │
+//                  │       └─▶ client auto-streams the private coach review;
+//                  │            user picks Revise (back to edit) or Send (confirm:true)
+//                  └─▶ server: danger  ──▶ thread ended
+//
+// Manual "Review" is the explicit "check this" nudge — runs the coach without
+// sending. If a review is already on screen, Send goes straight to confirm:true.
+// Editing the draft after a review clears it (the review is about the old text).
+//
+// Moderator beats (shared, neutral) arrive via the same /messages poll and are
+// interleaved into the timeline by ts.
+// ──────────────────────────────────────────────────────────────────────────────
 
 const DEFAULT_SAFETY =
   "This conversation appears to have escalated into a safety concern. Sayable " +
@@ -12,12 +32,14 @@ const DEFAULT_SAFETY =
 export default function ThreadView({ relationshipId, thread, onBack }) {
   const { user, token } = useAuth();
   const [messages, setMessages] = useState([]);
+  const [beats, setBeats] = useState([]);
   const [safety, setSafety] = useState(thread.safetyState || "calm");
   const [safetyMsg, setSafetyMsg] = useState("");
   const [draft, setDraft] = useState("");
   const [review, setReview] = useState("");
   const [reviewing, setReviewing] = useState(false);
   const [sending, setSending] = useState(false);
+  const [askingModerator, setAskingModerator] = useState(false);
   const [err, setErr] = useState("");
   const endRef = useRef(null);
 
@@ -25,26 +47,39 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
     try {
       const r = await api.messages(relationshipId, thread.threadId);
       setMessages(r.messages || []);
+      setBeats(r.moderatorBeats || []);
       if (r.safetyState) setSafety(r.safetyState);
     } catch (_) {
       /* transient poll error — ignore */
     }
   }
 
-  // Short-poll every 3s for the partner's messages (realtime decision: poll).
   useEffect(() => {
     load();
     const id = setInterval(load, 3000);
     return () => clearInterval(id);
   }, [relationshipId, thread.threadId]);
 
+  // Interleave human messages + shared moderator beats by timestamp.
+  const timeline = useMemo(() => {
+    const items = [
+      ...messages.map((m) => ({ kind: "msg", ts: m.ts, data: m })),
+      ...beats.map((b) => ({ kind: "beat", ts: b.ts, data: b })),
+    ];
+    items.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
+    return items;
+  }, [messages, beats]);
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+  }, [timeline.length]);
 
+  // Manual "Check this" — runs the coach review without sending.
   async function runReview() {
     if (!draft.trim()) return;
-    setReview(""); setReviewing(true); setErr("");
+    setReview("");
+    setReviewing(true);
+    setErr("");
     try {
       await api.saveDraft(relationshipId, thread.threadId, draft);
       for await (const ev of openCoachStream({
@@ -63,17 +98,43 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
     }
   }
 
+  // Server-driven send-gate. If a review is already on screen, the user has
+  // already seen it: send with confirm:true. Otherwise, phase 1: if the server
+  // returns status:"review" (charged), auto-stream the review and pause.
   async function send() {
     if (!draft.trim()) return;
-    setSending(true); setErr("");
+    setSending(true);
+    setErr("");
     try {
-      const r = await api.send(relationshipId, thread.threadId, draft.trim());
+      const hasReview = review.trim().length > 0;
+      const r = await api.send(relationshipId, thread.threadId, draft.trim(), {
+        confirm: hasReview,
+      });
       if (r.status === "sent") {
-        setDraft(""); setReview("");
+        setDraft("");
+        setReview("");
         await load();
       } else if (r.status === "ended") {
         setSafety("ended");
         setSafetyMsg(r.safetyMessage || "");
+      } else if (r.status === "review") {
+        // Server says this draft is charged and we haven't reviewed it. Stream the
+        // review now; the user picks Revise (edit) or Send (confirm:true).
+        setReview("");
+        setReviewing(true);
+        try {
+          for await (const ev of openCoachStream({
+            relationshipId,
+            threadId: thread.threadId,
+            draftText: draft.trim(),
+            token,
+          })) {
+            if (ev.type === "text-delta") setReview((p) => p + ev.text);
+            else if (ev.type === "error") setErr(ev.error);
+          }
+        } finally {
+          setReviewing(false);
+        }
       }
     } catch (e) {
       setErr(e.message);
@@ -82,23 +143,71 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
     }
   }
 
+  // Editing the draft invalidates any review (it was about the old text).
+  function onDraftChange(e) {
+    setDraft(e.target.value);
+    if (review) setReview("");
+  }
+
+  // "Where are we?" — on-request shared moderator beat. Beat lands via poll.
+  async function askModerator() {
+    setAskingModerator(true);
+    setErr("");
+    try {
+      await api.requestModerator(relationshipId, thread.threadId);
+      await load();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setAskingModerator(false);
+    }
+  }
+
   const ended = safety === "ended";
+  const hasReview = review.trim().length > 0;
 
   return (
     <div className="thread">
       <div className="thread__head">
-        <button className="topbar__link" onClick={onBack}>←</button>
+        <button className="topbar__link" onClick={onBack}>
+          ←
+        </button>
         <span className="thread__name">{thread.name}</span>
+        {!ended && (
+          <button
+            className="topbar__link"
+            onClick={askModerator}
+            disabled={askingModerator}
+            title="Ask the shared moderator where you two are"
+          >
+            {askingModerator ? "…" : "Where are we?"}
+          </button>
+        )}
       </div>
 
       <div className="messages">
-        {messages.length === 0 && (
+        {timeline.length === 0 && (
           <div className="empty">No messages yet. Say the first thing.</div>
         )}
-        {messages.map((m) => {
+        {timeline.map((item) => {
+          if (item.kind === "beat") {
+            return (
+              <div
+                key={`mod-${item.data.summaryId || item.ts}`}
+                className="mod-beat"
+              >
+                <span className="mod-beat__label">moderator · shared</span>
+                <div className="mod-beat__body">{item.data.text}</div>
+              </div>
+            );
+          }
+          const m = item.data;
           const mine = m.senderId === user.userId;
           return (
-            <div key={m.messageId || m.ts} className={`msg ${mine ? "msg--me" : ""}`}>
+            <div
+              key={m.messageId || m.ts}
+              className={`msg ${mine ? "msg--me" : ""}`}
+            >
               <span className="msg__who">{mine ? "You" : "Your partner"}</span>
               <div className="msg__body">{m.text}</div>
             </div>
@@ -115,29 +224,56 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
 
       {!ended && (
         <div className="compose">
-          {review && (
+          {(review || reviewing) && (
             <div className="coach-aside">
-              <span className="coach-aside__label">My Coach</span>
-              {review}
+              <span className="coach-aside__label">
+                your coach · only you see this
+              </span>
+              {review || (reviewing ? "Reading…" : "")}
             </div>
           )}
           <textarea
             placeholder="Write the hard thing…"
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            disabled={sending}
+            onChange={onDraftChange}
+            disabled={sending || reviewing}
           />
           <div className="compose__actions">
-            <button
-              className="btn btn--ghost"
-              onClick={runReview}
-              disabled={reviewing || sending || !draft.trim()}
-            >
-              {reviewing ? "Reading…" : "Review"}
-            </button>
-            <button className="btn" onClick={send} disabled={sending || !draft.trim()}>
-              {sending ? "Sending…" : "Send"}
-            </button>
+            {hasReview ? (
+              <>
+                <button
+                  className="btn btn--ghost"
+                  onClick={() => setReview("")}
+                  disabled={sending}
+                >
+                  Revise
+                </button>
+                <button
+                  className="btn"
+                  onClick={send}
+                  disabled={sending || !draft.trim()}
+                >
+                  {sending ? "Sending…" : "Send"}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  className="btn btn--ghost"
+                  onClick={runReview}
+                  disabled={reviewing || sending || !draft.trim()}
+                >
+                  {reviewing ? "Reading…" : "Check this"}
+                </button>
+                <button
+                  className="btn"
+                  onClick={send}
+                  disabled={sending || reviewing || !draft.trim()}
+                >
+                  {sending ? "Sending…" : "Send"}
+                </button>
+              </>
+            )}
           </div>
           {err && <div className="auth__error">{err}</div>}
         </div>

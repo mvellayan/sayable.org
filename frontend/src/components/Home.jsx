@@ -11,7 +11,9 @@ export default function Home() {
   const [threads, setThreads] = useState(null);
   const [thread, setThread] = useState(null);
   const [newRel, setNewRel] = useState("");
+  const [newRelContext, setNewRelContext] = useState("");
   const [newThread, setNewThread] = useState("");
+  const [newThreadPurpose, setNewThreadPurpose] = useState("");
   const [invite, setInvite] = useState(null);
   const [err, setErr] = useState("");
 
@@ -30,8 +32,11 @@ export default function Home() {
     e.preventDefault();
     if (!newRel.trim()) return;
     try {
-      const r = await api.createRelationship({ label: newRel.trim() });
-      setNewRel("");
+      const r = await api.createRelationship({
+        label: newRel.trim(),
+        context: newRelContext || undefined,
+      });
+      setNewRel(""); setNewRelContext("");
       await loadRels();
       openRel(r.relationship);
     } catch (e) { setErr(e.message); }
@@ -40,8 +45,11 @@ export default function Home() {
     e.preventDefault();
     if (!newThread.trim() || !rel) return;
     try {
-      const t = await api.createThread(rel.relationshipId, { name: newThread.trim() });
-      setNewThread("");
+      const t = await api.createThread(rel.relationshipId, {
+        name: newThread.trim(),
+        purpose: newThreadPurpose || undefined,
+      });
+      setNewThread(""); setNewThreadPurpose("");
       const list = await api.threads(rel.relationshipId);
       setThreads(list.threads);
       setThread(t.thread);
@@ -95,6 +103,19 @@ export default function Home() {
                 className="field" placeholder="name a relationship (e.g. Us)"
                 value={newRel} onChange={(e) => setNewRel(e.target.value)}
               />
+              <select
+                className="field"
+                value={newRelContext}
+                onChange={(e) => setNewRelContext(e.target.value)}
+                title="who you are to each other (skippable)"
+              >
+                <option value="">context (skip)</option>
+                <option value="married">married</option>
+                <option value="partnered">partnered</option>
+                <option value="friends">friends</option>
+                <option value="family">family</option>
+                <option value="co-parenting">co-parenting</option>
+              </select>
               <button className="btn">Create</button>
             </form>
           </>
@@ -145,6 +166,19 @@ export default function Home() {
                 className="field" placeholder="new thread (e.g. Money, Feeling unheard)"
                 value={newThread} onChange={(e) => setNewThread(e.target.value)}
               />
+              <select
+                className="field"
+                value={newThreadPurpose}
+                onChange={(e) => setNewThreadPurpose(e.target.value)}
+                title="what is this conversation about (skippable)"
+              >
+                <option value="">purpose (skip)</option>
+                <option value="planning">planning</option>
+                <option value="argument">argument</option>
+                <option value="repair">repair</option>
+                <option value="feedback">feedback</option>
+                <option value="conflict">conflict</option>
+              </select>
               <button className="btn">Add</button>
             </form>
           </>

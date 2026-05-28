@@ -35,7 +35,12 @@ const {
 } = require("../lib/ddb");
 const { newId, isoNow } = require("../lib/ids");
 const { getCallerFromEvent, requireAuth } = require("../lib/auth");
-const { assertMember, listSharedMessages, buildMediatorContext } = require("../lib/access");
+const {
+  assertMember,
+  listSharedMessages,
+  listMediatorSummaries,
+  buildMediatorContext,
+} = require("../lib/access");
 const { classifyMessage, SAFETY_MESSAGE } = require("../ai/safety");
 const { generateBeat } = require("../ai/mediator");
 
@@ -211,9 +216,16 @@ router.get(
       threadId: params.tid,
     });
     if (!thread) return notFound("Thread not found");
-    const messages = await listSharedMessages(params.tid, 200);
+    // Fetch the messages AND the shared moderator beats so the client can render
+    // them interleaved by timestamp. mediatorSummaries are shared by definition
+    // (access.js boundary) — no private data leaks here.
+    const [messages, moderatorBeats] = await Promise.all([
+      listSharedMessages(params.tid, 200),
+      listMediatorSummaries(params.tid, 50),
+    ]);
     return ok({
       messages,
+      moderatorBeats,
       safetyState: thread.safetyState || "calm",
       threadStatus: thread.status || "calm",
     });

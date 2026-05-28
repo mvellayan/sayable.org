@@ -72,9 +72,14 @@ export const api = {
       method: "POST",
       body: { text },
     }),
-  send: (rid, tid, text) =>
+  // Two-phase send. Phase 1 (default): if charged, returns {status:"review"} without
+  // committing. Phase 2: pass confirm:true to commit (server re-classifies for danger).
+  send: (rid, tid, text, { confirm = false } = {}) =>
     request(`/relationships/${rid}/threads/${tid}/send`, {
       method: "POST",
-      body: { text },
+      body: { text, confirm },
     }),
+  // Ask the shared moderator for one beat now (auto-cadence also fires server-side).
+  requestModerator: (rid, tid) =>
+    request(`/relationships/${rid}/threads/${tid}/moderator`, { method: "POST" }),
 };

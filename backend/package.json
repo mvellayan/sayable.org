@@ -5,7 +5,8 @@
   "description": "Sayable Lambda backend (auth + api + streaming chat).",
   "main": "handlers/api.js",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "eval": "node eval/coach-skills.eval.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.0",

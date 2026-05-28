@@ -67,10 +67,12 @@ async function coachHandler(event, responseStream) {
     // Conversation purpose conditions the review. New threads store `purpose`;
     // fall back to legacy `goal` for threads created before the rename.
     const purpose = thread ? (thread.purpose || thread.goal || null) : null;
+    // Optional manual Coach Skill override (a skill id); auto-selection biases by purpose.
+    const skill = body.skill ? body.skill.toString() : null;
 
     write(responseStream, "review-start", {});
     let finalText = "";
-    for await (const chunk of reviewDraft({ draftText, context, purpose })) {
+    for await (const chunk of reviewDraft({ draftText, context, purpose, skill })) {
       if (chunk.type === "text_delta") {
         finalText += chunk.text;
         write(responseStream, "text-delta", { text: chunk.text });

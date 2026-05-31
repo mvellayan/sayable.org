@@ -41,6 +41,26 @@ When the app detects dangerous escalation, it stops normal coaching.
 
 ---
 
+## 14a. Manipulation & the Competence Line
+
+The coach helps with communication *competence*, never *representation*. It
+refuses to help one user manipulate, pressure, guilt, gaslight, or wear down the
+other — guilt-tripping, DARVO, coercive pressure. This line is enforced in the
+prompt guardrail, not just stated as a principle, and is covered by a manipulation
+eval suite.
+
+**Where protection actually lives.** A compose-side refusal is necessary but not
+sufficient: someone intent on pressuring the other person can simply type the
+message and send it without ever opening the coach. The structural protection is
+the **Shared Mediator** (§9), which sees only the shared sent messages, forms an
+independent assessment, and can name a coercive dynamic neutrally to both people.
+The app does not claim a refusal-only guardrail as protection.
+
+Receiver-side protection — each person's own coach flagging incoming coercion to
+the target — is the strongest answer and is planned, not yet built.
+
+---
+
 ## 15. No Third-Party Participation
 
 No third parties are added to chats.

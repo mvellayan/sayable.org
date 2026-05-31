@@ -122,3 +122,45 @@ The app may also privately help the receiver interpret the message:
 - What may have hurt you
 - What might be a non-escalating response
 - What clarification could you ask for?
+
+---
+
+## 8a. Coach Skills (Composable Competences)
+
+My Coach applies a small, curated set of communication *competences* —
+de-escalation, boundaries, repair, listening-back, naming-the-feeling,
+money-talk — assembled in one voice, never as competing agents. A skill is a
+competence ("discuss money without it becoming about blame"), never
+representation ("help me win"). Up to two apply per message, biased by the
+conversation's purpose and the coach reading the draft.
+
+**Visibility — felt, not chosen.** There is no skill-picker, loadout, or
+settings catalog. Instead, at the moment the coach is helping, it quietly shows
+which competence it is leaning on (e.g. *leaning on: de-escalation*), and the
+user can redirect it with a one-tap nudge. The label and nudge are private
+("only you see this") and styled recessively, never as loud as a human message.
+
+---
+
+## 8b. Current Observations
+
+My Coach always shows its current observations, so it reads as observant and
+reflective rather than reactive.
+
+**About you and the dynamic — never the other person.** Observations reflect on
+the user's own communication and the shape of the exchange. They never contain a
+tactical read of the other person. Connection is half saying, half hearing: an
+observation helps you see yourself and the conversation, not a lever to manage
+your partner.
+
+- Good: "You've raised three points without being acknowledged yet."
+- Good: "This started as logistics, but it's really about feeling forgotten."
+- Never: "She's defensive right now — push here."
+
+**Privacy.** Observations are private to the user, assembled only inside the
+coach's private context boundary; they never contain the other person's private
+data.
+
+**Refresh.** Observations update when the user opens the thread and right after
+they send — current at the moments the user looks, without paying for every
+message in a fast exchange.

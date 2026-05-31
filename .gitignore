@@ -13,6 +13,7 @@ backend/dist/
 
 # CDK
 infra/cdk.out/
+infra/cdk.context.json
 
 # Environment
 .env
@@ -23,6 +24,7 @@ aws/.env
 # OS / editor
 .DS_Store
 *.log
+.idea/
 
 # Claude Code (per-machine settings only)
 .claude/settings.local.json

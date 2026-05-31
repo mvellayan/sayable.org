@@ -18,6 +18,7 @@ The Shared Mediator is visible to both users.
 - Suggest a repair attempt
 - Detect circular arguments
 - Name the pattern neutrally
+- Name a coercive or pressuring dynamic neutrally
 - Recommend an offline conversation
 - Flag safety concerns
 
@@ -30,6 +31,14 @@ The Shared Mediator is visible to both users.
 - Decide who is right
 - Pressure forgiveness
 - Pressure reconciliation
+
+**Independent by construction.** The Shared Mediator forms its own assessment
+from the shared *sent* messages only. It never reads either person's drafts,
+private coaching, observations, or private profile. This independence is what
+lets it surface a coercive or pressuring dynamic without becoming a channel that
+leaks one side's private read to the other. The structural protection for the
+person being pressured lives here — in a neutral view both people can see — not
+in either coach.
 
 ---
 

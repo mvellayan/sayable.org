@@ -82,4 +82,11 @@ export const api = {
   // Ask the shared moderator for one beat now (auto-cadence also fires server-side).
   requestModerator: (rid, tid) =>
     request(`/relationships/${rid}/threads/${tid}/moderator`, { method: "POST" }),
+
+  // Current observations (private; about you + the dynamic). GET reads the stored
+  // one instantly; POST regenerates it (called on thread-open and after send).
+  getObservations: (rid, tid) =>
+    request(`/relationships/${rid}/threads/${tid}/observations`),
+  refreshObservations: (rid, tid) =>
+    request(`/relationships/${rid}/threads/${tid}/observations`, { method: "POST" }),
 };

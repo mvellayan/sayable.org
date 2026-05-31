@@ -253,6 +253,80 @@ button.row { width: 100%; text-align: left; font: inherit; color: inherit; curso
 }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 
+/* Coach Skills — the quiet "leaning on" label + one-tap nudge (decision 1).
+   Never a standing picker; surfaced only mid-review, typographically subordinate. */
+.coach-aside__skills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-2xs) var(--s-sm);
+  margin-bottom: var(--s-2xs);
+}
+.coach-aside__leaning {
+  font-size: 12px;
+  color: var(--ink-muted);
+  font-style: italic;
+}
+.coach-aside__nudge {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-muted);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--hairline);
+  padding: 0 0 1px;
+  cursor: pointer;
+}
+.coach-aside__nudge:hover { color: var(--ink); }
+.coach-aside__nudge:disabled { opacity: 0.5; cursor: default; }
+.coach-aside__nudge-row {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2xs);
+  margin-top: var(--s-2xs);
+}
+.coach-aside__chip {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--ink-muted);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: 2px var(--s-sm);
+  cursor: pointer;
+}
+.coach-aside__chip:hover { color: var(--ink); border-color: var(--ink-muted); }
+.coach-aside__chip:disabled { opacity: 0.5; cursor: default; }
+.coach-aside__text { white-space: pre-wrap; }
+
+/* Current observations — always-on, recessive private presence (decision 2).
+   A quiet margin note, NOT a card: a top hairline + recessive type, matching the
+   coach aside and moderator beat. DESIGN.md: the AI layer is never a card/bubble. */
+.observations {
+  font-family: var(--font-ui);
+  margin: var(--s-sm) var(--s-lg) 0;
+  padding: var(--s-sm) 0;
+  border-top: 1px solid var(--hairline);
+  animation: fade var(--dur) var(--ease-out);
+}
+.observations__label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-muted);
+  margin-bottom: var(--s-2xs);
+}
+.observations__body {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink-muted);
+  white-space: pre-wrap;
+}
+
 /* safety banner — ink on surface, weight not alarm color (DESIGN.md) */
 .safety {
   margin: var(--s-md) var(--s-lg);
@@ -306,7 +380,7 @@ button.row { width: 100%; text-align: left; font: inherit; color: inherit; curso
 }
 .mod-beat__label {
   display: block;
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -314,7 +388,7 @@ button.row { width: 100%; text-align: left; font: inherit; color: inherit; curso
   margin-bottom: 6px;
 }
 .mod-beat__body {
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   font-size: 14px;
   line-height: 1.55;
   color: var(--ink-muted);

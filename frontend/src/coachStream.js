@@ -10,7 +10,7 @@
 
 const COACH_URL = import.meta.env.VITE_COACH_STREAM_URL || "";
 
-export async function* openCoachStream({ relationshipId, threadId, draftText, token }) {
+export async function* openCoachStream({ relationshipId, threadId, draftText, token, skill }) {
   if (!COACH_URL) throw new Error("VITE_COACH_STREAM_URL not configured");
   const res = await fetch(COACH_URL, {
     method: "POST",
@@ -18,7 +18,9 @@ export async function* openCoachStream({ relationshipId, threadId, draftText, to
       "content-type": "application/json",
       authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ relationshipId, threadId, draftText }),
+    // `skill` (optional) is the one-tap nudge: a manual competence override the
+    // server biases selection toward. Omitted = auto-selection by purpose.
+    body: JSON.stringify({ relationshipId, threadId, draftText, skill: skill || undefined }),
   });
   if (!res.ok || !res.body) {
     throw new Error(`coach stream failed: HTTP ${res.status}`);

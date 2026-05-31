@@ -41,6 +41,14 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
   const [sending, setSending] = useState(false);
   const [askingModerator, setAskingModerator] = useState(false);
   const [err, setErr] = useState("");
+  // Coach Skills (decision 1): which competence the coach is leaning on + the small
+  // set the one-tap nudge can redirect to. No standing picker — surfaced only mid-review.
+  const [activeSkills, setActiveSkills] = useState([]);
+  const [availableSkills, setAvailableSkills] = useState([]);
+  const [showNudge, setShowNudge] = useState(false);
+  // Current observations (decision 2): always-on, about you + the dynamic.
+  const [observation, setObservation] = useState(null);
+  const [obsLoading, setObsLoading] = useState(false);
   const endRef = useRef(null);
 
   async function load() {
@@ -74,21 +82,53 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [timeline.length]);
 
-  // Manual "Check this" — runs the coach review without sending.
-  async function runReview() {
-    if (!draft.trim()) return;
+  // Current observations: load the stored one instantly, then regenerate.
+  async function loadObs() {
+    try {
+      const r = await api.getObservations(relationshipId, thread.threadId);
+      if (r.observation) setObservation(r.observation);
+    } catch (_) {
+      /* ignore — observations are best-effort presence, never load-bearing */
+    }
+  }
+  async function refreshObs() {
+    setObsLoading(true);
+    try {
+      const r = await api.refreshObservations(relationshipId, thread.threadId);
+      if (r.observation) setObservation(r.observation);
+    } catch (_) {
+      /* fail-soft: keep whatever observation we already have */
+    } finally {
+      setObsLoading(false);
+    }
+  }
+
+  // Refresh observations on thread-open (decision 4 cadence).
+  useEffect(() => {
+    setObservation(null);
+    loadObs().then(refreshObs);
+  }, [relationshipId, thread.threadId]);
+
+  // Shared coach-review streamer. Updates the review text AND which competence the
+  // coach is leaning on. `skill` (optional) is the one-tap nudge override.
+  async function streamReview(text, skill) {
     setReview("");
+    setActiveSkills([]);
+    setShowNudge(false);
     setReviewing(true);
     setErr("");
     try {
-      await api.saveDraft(relationshipId, thread.threadId, draft);
       for await (const ev of openCoachStream({
         relationshipId,
         threadId: thread.threadId,
-        draftText: draft,
+        draftText: text,
         token,
+        skill,
       })) {
-        if (ev.type === "text-delta") setReview((p) => p + ev.text);
+        if (ev.type === "skills") {
+          setActiveSkills(ev.active || []);
+          setAvailableSkills(ev.available || []);
+        } else if (ev.type === "text-delta") setReview((p) => p + ev.text);
         else if (ev.type === "error") setErr(ev.error);
       }
     } catch (e) {
@@ -96,6 +136,23 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
     } finally {
       setReviewing(false);
     }
+  }
+
+  // Manual "Check this" — runs the coach review without sending.
+  async function runReview() {
+    if (!draft.trim()) return;
+    try {
+      await api.saveDraft(relationshipId, thread.threadId, draft);
+    } catch (_) {
+      /* non-fatal: review can still run on the in-memory draft */
+    }
+    await streamReview(draft, null);
+  }
+
+  // One-tap nudge: re-run the review biased toward a chosen competence.
+  async function nudgeSkill(id) {
+    if (!draft.trim()) return;
+    await streamReview(draft, id);
   }
 
   // Server-driven send-gate. If a review is already on screen, the user has
@@ -113,28 +170,16 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
       if (r.status === "sent") {
         setDraft("");
         setReview("");
+        setActiveSkills([]);
         await load();
+        refreshObs(); // decision 4: refresh observations after send
       } else if (r.status === "ended") {
         setSafety("ended");
         setSafetyMsg(r.safetyMessage || "");
       } else if (r.status === "review") {
         // Server says this draft is charged and we haven't reviewed it. Stream the
         // review now; the user picks Revise (edit) or Send (confirm:true).
-        setReview("");
-        setReviewing(true);
-        try {
-          for await (const ev of openCoachStream({
-            relationshipId,
-            threadId: thread.threadId,
-            draftText: draft.trim(),
-            token,
-          })) {
-            if (ev.type === "text-delta") setReview((p) => p + ev.text);
-            else if (ev.type === "error") setErr(ev.error);
-          }
-        } finally {
-          setReviewing(false);
-        }
+        await streamReview(draft.trim(), null);
       }
     } catch (e) {
       setErr(e.message);
@@ -146,7 +191,11 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
   // Editing the draft invalidates any review (it was about the old text).
   function onDraftChange(e) {
     setDraft(e.target.value);
-    if (review) setReview("");
+    if (review) {
+      setReview("");
+      setActiveSkills([]);
+      setShowNudge(false);
+    }
   }
 
   // "Where are we?" — on-request shared moderator beat. Beat lands via poll.
@@ -222,6 +271,17 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
         </div>
       )}
 
+      {!ended && (observation || obsLoading) && (
+        <div className="observations">
+          <span className="observations__label">
+            your coach notices · only you see this
+          </span>
+          <div className="observations__body">
+            {observation ? observation.text : "Noticing…"}
+          </div>
+        </div>
+      )}
+
       {!ended && (
         <div className="compose">
           {(review || reviewing) && (
@@ -229,7 +289,42 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
               <span className="coach-aside__label">
                 your coach · only you see this
               </span>
-              {review || (reviewing ? "Reading…" : "")}
+              {activeSkills.length > 0 && (
+                <div className="coach-aside__skills">
+                  <span className="coach-aside__leaning">
+                    leaning on: {activeSkills.map((s) => s.label).join(" · ")}
+                  </span>
+                  <button
+                    type="button"
+                    className="coach-aside__nudge"
+                    onClick={() => setShowNudge((v) => !v)}
+                    disabled={reviewing}
+                  >
+                    nudge
+                  </button>
+                  {showNudge && (
+                    <div className="coach-aside__nudge-row">
+                      {availableSkills.map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          className="coach-aside__chip"
+                          onClick={() => {
+                            setShowNudge(false);
+                            nudgeSkill(s.id);
+                          }}
+                          disabled={reviewing}
+                        >
+                          {s.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="coach-aside__text">
+                {review || (reviewing ? "Reading…" : "")}
+              </div>
             </div>
           )}
           <textarea

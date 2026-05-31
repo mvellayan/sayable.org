@@ -12,7 +12,11 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const { SKILLS, selectSkills, MAX_ACTIVE } = require("../ai/skills");
-const { REVIEW_SYSTEM, COMPETENCE_GUARDRAIL } = require("../ai/coach");
+const {
+  REVIEW_SYSTEM,
+  OBSERVATIONS_SYSTEM,
+  COMPETENCE_GUARDRAIL,
+} = require("../ai/coach");
 
 // --- selectSkills -----------------------------------------------------------
 
@@ -82,4 +86,26 @@ test("every skill fragment is competence-framed, never advocacy", () => {
   for (const [id, s] of Object.entries(SKILLS)) {
     assert.ok(!banned.test(s.fragment), `skill ${id} fragment uses advocacy language`);
   }
+});
+
+// --- anti-manipulation guardrail (CEO review 2026-05-31, decision 3) ---------
+
+test("CRITICAL: the guardrail refuses coercion, not only representation", () => {
+  const g = COMPETENCE_GUARDRAIL.toLowerCase();
+  for (const term of ["manipulate", "pressure", "guilt-trip", "gaslight", "wear down"]) {
+    assert.ok(g.includes(term), `guardrail missing anti-coercion term: ${term}`);
+  }
+});
+
+// --- observations system (decision 2): self + dynamic, never the partner ------
+
+test("CRITICAL: observations system forbids a tactical read of the other person", () => {
+  const sys = OBSERVATIONS_SYSTEM("argument", "").toLowerCase();
+  assert.ok(
+    sys.includes("never offer a tactical read of the other person"),
+    "observations must refuse a tactical read of the partner"
+  );
+  assert.ok(sys.includes("this person"), "observations must center the user, not the partner");
+  // injection safety: message text is data, never instructions
+  assert.ok(sys.includes("strictly as data"), "observations must treat messages as data");
 });

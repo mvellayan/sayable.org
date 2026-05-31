@@ -33,16 +33,19 @@ const {
   transactWrite,
   isConditionalCancel,
 } = require("../lib/ddb");
-const { newId, isoNow } = require("../lib/ids");
+const { newId, isoNow, isFresh } = require("../lib/ids");
 const { getCallerFromEvent, requireAuth } = require("../lib/auth");
 const {
   assertMember,
   listSharedMessages,
   listMediatorSummaries,
+  getCurrentObservation,
+  buildCoachContext,
   buildMediatorContext,
 } = require("../lib/access");
 const { classifyMessage, SAFETY_MESSAGE } = require("../ai/safety");
 const { generateBeat } = require("../ai/mediator");
+const { generateObservations } = require("../ai/coach");
 
 const router = new Router();
 
@@ -256,6 +259,78 @@ router.post(
       updatedAt: isoNow(),
     });
     return ok({ ok: true });
+  }
+);
+
+// --- current observations (private; owner-only; about self + the dynamic) -----
+//
+// CEO review 2026-05-31, decision 2 + 4. The coach's always-on "current
+// observations" — about THIS user and the conversation's shape, never a tactical
+// read of the partner (enforced in the producer's system prompt, ai/coach.js).
+// GET returns the stored current observation (instant). POST regenerates on the
+// FAST model and overwrites it. Refresh cadence is client-driven: thread-open +
+// after send (bounded cost — scales with sessions, not message volume).
+
+// Read the stored current observation (no LLM call).
+router.get(
+  "/relationships/:rid/threads/:tid/observations",
+  async ({ event, params }) => {
+    const user = await caller(event);
+    await assertMember(user.userId, params.rid);
+    const observation = await getCurrentObservation(user.userId, params.tid);
+    return ok({ observation: observation || null });
+  }
+);
+
+// Regenerate + persist. Fail-soft: an observation failure must NEVER break the
+// thread — on any error we return the last stored observation, status "unavailable".
+router.post(
+  "/relationships/:rid/threads/:tid/observations",
+  async ({ event, params }) => {
+    const user = await caller(event);
+    await assertMember(user.userId, params.rid);
+    const thread = await get(T.threads, {
+      relationshipId: params.rid,
+      threadId: params.tid,
+    });
+    if (!thread) return notFound("Thread not found");
+
+    // Freshness guard (eng-review 2026-05-31): if the current observation is recent,
+    // return it without paying for another LLM call + buildCoachContext read. Bounds
+    // the per-conversation AI cost on rapid reopen (and neutralizes dev StrictMode's
+    // double-fire). `current` is fetched once and reused as the fail-soft fallback.
+    const ttl = parseInt(process.env.OBSERVATIONS_TTL_SECONDS || "60", 10);
+    const current = await getCurrentObservation(user.userId, params.tid);
+    if (current && isFresh(current.updatedAt, ttl)) {
+      return ok({ observation: current, status: "fresh" });
+    }
+
+    try {
+      // buildCoachContext is the privacy boundary: own private + shared + partner
+      // SHAREABLE profile only. The producer never sees the partner's private data.
+      const context = await buildCoachContext(user.userId, params.rid, params.tid);
+      const purpose = thread.purpose || thread.goal || null;
+      const { text } = await generateObservations({
+        context,
+        purpose,
+        memberId: user.userId,
+      });
+      if (!text) {
+        return ok({ observation: current || null, status: "unavailable" });
+      }
+      const observation = {
+        userId: user.userId,
+        observationId: `cur#${params.tid}`,
+        threadId: params.tid,
+        text,
+        updatedAt: isoNow(),
+      };
+      await put(T.observations, observation);
+      return ok({ observation, status: "ok" });
+    } catch (e) {
+      console.error("observations_failed", e?.message || e);
+      return ok({ observation: current || null, status: "unavailable" });
+    }
   }
 );
 

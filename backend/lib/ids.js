@@ -46,4 +46,25 @@ function sixDigitOtp() {
   return String(crypto.randomInt(0, 1000000)).padStart(6, "0");
 }
 
-module.exports = { newId, isoNow, todayInTz, hourInTz, yesterdayInTz, dateInTz, sixDigitOtp };
+// True if `isoTs` is within `ttlSeconds` of `nowMs`. Used to skip redundant
+// regeneration of the coach's current observation (eng-review 2026-05-31): a
+// fresh-enough observation is returned as-is instead of paying another LLM call
+// + buildCoachContext read on every thread-open. Missing/invalid/future ⇒ not fresh.
+function isFresh(isoTs, ttlSeconds, nowMs = Date.now()) {
+  if (!isoTs || !(ttlSeconds > 0)) return false;
+  const t = new Date(isoTs).getTime();
+  if (Number.isNaN(t)) return false;
+  const age = nowMs - t;
+  return age >= 0 && age < ttlSeconds * 1000;
+}
+
+module.exports = {
+  newId,
+  isoNow,
+  todayInTz,
+  hourInTz,
+  yesterdayInTz,
+  dateInTz,
+  sixDigitOtp,
+  isFresh,
+};

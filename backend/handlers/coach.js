@@ -73,7 +73,14 @@ async function coachHandler(event, responseStream) {
     write(responseStream, "review-start", {});
     let finalText = "";
     for await (const chunk of reviewDraft({ draftText, context, purpose, skill })) {
-      if (chunk.type === "text_delta") {
+      if (chunk.type === "skills") {
+        // Which competence the coach is leaning on + the small set the one-tap nudge
+        // can redirect to. Private to this user (the whole stream is).
+        write(responseStream, "skills", {
+          active: chunk.active,
+          available: chunk.available,
+        });
+      } else if (chunk.type === "text_delta") {
         finalText += chunk.text;
         write(responseStream, "text-delta", { text: chunk.text });
       }

@@ -141,6 +141,15 @@ async function listOwnObservations(userId, limit = 25) {
   });
 }
 
+// The user's CURRENT observation for one thread (CEO review 2026-05-31, decision 2).
+// Owner-keyed: observationId `cur#<threadId>` is overwritten on each refresh, so there
+// is exactly one current row per user per thread. Read here (the private-table boundary);
+// the producer in ai/coach.js generates it and the handler persists it.
+async function getCurrentObservation(userId, threadId) {
+  if (!userId || !threadId) return null;
+  return get(T.observations, { userId, observationId: `cur#${threadId}` });
+}
+
 // --- the two context builders (the entire enforcement surface) ---------------
 
 // Context for User A's PRIVATE coach (My Coach / Their Coach). Includes A's own
@@ -206,6 +215,7 @@ module.exports = {
   partnerIdOf,
   listSharedMessages,
   listMediatorSummaries,
+  getCurrentObservation,
   buildCoachContext,
   buildMediatorContext,
   // exported for unit tests of the boundary

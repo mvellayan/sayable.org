@@ -173,6 +173,38 @@ test("CRITICAL: a non-member cannot build context", async () => {
   );
 });
 
+test("getCurrentObservation is owner-keyed and never returns the partner's", async () => {
+  seedRelationship();
+  // Each user has a CURRENT observation for the same thread (same SK, different PK).
+  seed("observations", [
+    { userId: "A", observationId: "cur#T1", text: "A current observation" },
+    { userId: "B", observationId: "cur#T1", text: "B current observation" },
+  ]);
+  const a = await access.getCurrentObservation("A", "T1");
+  assert.equal(a.text, "A current observation");
+  const b = await access.getCurrentObservation("B", "T1");
+  assert.equal(b.text, "B current observation");
+  // A's coach context surfaces A's own observations, never B's current one.
+  const ctx = await access.buildCoachContext("A", "REL", "T1");
+  assert.ok(
+    !jsonContains(ctx, "B current observation"),
+    "leaked B current observation into A's coach context"
+  );
+  // And it never lands in the shared mediator context.
+  const med = await access.buildMediatorContext("REL", "T1", "A");
+  assert.ok(
+    !jsonContains(med, "current observation"),
+    "current observation leaked into the shared mediator context"
+  );
+});
+
+test("getCurrentObservation tolerates missing ids without throwing", async () => {
+  reset();
+  assert.equal(await access.getCurrentObservation(null, "T1"), null);
+  assert.equal(await access.getCurrentObservation("A", null), null);
+  assert.equal(await access.getCurrentObservation("A", "T-none"), null);
+});
+
 test("shareableProfileFields drops private fields and empty profiles", () => {
   assert.equal(access.shareableProfileFields(null), null);
   const out = access.shareableProfileFields({

@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import ThreadView from "./ThreadView";
 
 // Relationships → threads → thread view. State-driven (no nested routes).
 export default function Home() {
-  const { signout } = useAuth();
+  const { user, signout } = useAuth();
   const [rels, setRels] = useState(null);
   const [rel, setRel] = useState(null);
   const [threads, setThreads] = useState(null);
@@ -74,6 +75,9 @@ export default function Home() {
     <div className="app">
       <div className="topbar">
         <h1 className="topbar__brand">Sayable</h1>
+        {user?.role === "admin" && (
+          <Link className="topbar__link" to="/admin">admin</Link>
+        )}
         <button className="topbar__link" onClick={signout}>sign out</button>
       </div>
       <div className="home">

@@ -89,4 +89,14 @@ export const api = {
     request(`/relationships/${rid}/threads/${tid}/observations`),
   refreshObservations: (rid, tid) =>
     request(`/relationships/${rid}/threads/${tid}/observations`, { method: "POST" }),
+
+  // admin (operational-only; requires role: admin)
+  adminOverview: () => request("/admin/overview"),
+  adminUsers: () => request("/admin/users"),
+  adminUpdateUser: (userId, patch) =>
+    request(`/admin/users/${userId}`, { method: "PATCH", body: patch }),
+  adminResetUsage: (userId) =>
+    request(`/admin/users/${userId}/reset-usage`, { method: "POST" }),
+  adminRelationships: () => request("/admin/relationships"),
+  adminSafetyEvents: () => request("/admin/safety-events"),
 };

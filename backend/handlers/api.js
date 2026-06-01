@@ -29,12 +29,16 @@ const {
   update,
   del,
   query,
+  scan,
   T,
   transactWrite,
   isConditionalCancel,
 } = require("../lib/ddb");
 const { newId, isoNow, isFresh } = require("../lib/ids");
-const { getCallerFromEvent, requireAuth } = require("../lib/auth");
+const { getCallerFromEvent, requireAuth, requireAdmin } = require("../lib/auth");
+const { resetUsage } = require("../lib/usage");
+
+const OWNER_EMAIL = (process.env.OWNER_EMAIL || "").toLowerCase();
 const {
   assertMember,
   listSharedMessages,
@@ -507,5 +511,171 @@ router.post(
     return ok({ status: "ok", summary });
   }
 );
+
+// =============================================================================
+// Admin (operational-only) — Sayable original, independent implementation.
+// A pattern shared in spirit with the separate `nigel` project, but NOT copied:
+// written fresh against Sayable's own Users/relationship model. See NOTICE.md.
+//
+// PRIVACY (load-bearing): admin is OPERATIONAL ONLY. These handlers read the
+// account/ops tables (users, relationships, threads-for-COUNTS, safetyEvents)
+// and NEVER the private tables (drafts, reviews, observations, profiles) or
+// message CONTENT. The access.js boundary is untouched. An admin can run the
+// app; an admin cannot read anyone's conversation.
+// =============================================================================
+
+async function adminCaller(event) {
+  const c = await getCallerFromEvent(event);
+  requireAdmin(c); // throws 401 if unauthenticated, 403 if not an admin
+  return c.user;
+}
+
+// Account/ops fields only — no private data lives on the user row beyond usage.
+function userView(u) {
+  const t = (u.usage && u.usage.totals) || {};
+  return {
+    userId: u.userId,
+    email: u.email,
+    firstName: u.firstName || "",
+    lastName: u.lastName || "",
+    role: u.role || "user",
+    status: u.status || "active",
+    createdAt: u.createdAt || null,
+    usage: {
+      callCount: t.callCount || 0,
+      costUsd: Number((t.costUsd || 0).toFixed(4)),
+    },
+  };
+}
+
+const byCreatedDesc = (a, b) =>
+  (b.createdAt || "").localeCompare(a.createdAt || "");
+
+// GET /admin/overview — counts + total spend. No names, no content.
+router.get("/admin/overview", async ({ event }) => {
+  await adminCaller(event);
+  const [users, relationships, threads, safetyEvents] = await Promise.all([
+    scan(T.users),
+    scan(T.relationships),
+    scan(T.threads),
+    scan(T.safetyEvents),
+  ]);
+  const costUsd = users.reduce(
+    (s, u) => s + ((u.usage && u.usage.totals && u.usage.totals.costUsd) || 0),
+    0
+  );
+  return ok({
+    users: {
+      total: users.length,
+      admins: users.filter((u) => u.role === "admin").length,
+      active: users.filter((u) => (u.status || "active") === "active").length,
+    },
+    relationships: {
+      total: relationships.length,
+      paired: relationships.filter((r) => r.userBId).length,
+    },
+    threads: {
+      total: threads.length,
+      ended: threads.filter((t) => t.safetyState === "ended").length,
+    },
+    safetyEvents: { total: safetyEvents.length },
+    costUsd: Number(costUsd.toFixed(4)),
+  });
+});
+
+// GET /admin/users — account list with usage summary (no private data).
+router.get("/admin/users", async ({ event }) => {
+  await adminCaller(event);
+  const users = await scan(T.users);
+  return ok({ users: users.map(userView).sort(byCreatedDesc) });
+});
+
+// PATCH /admin/users/:userId — change status (active|suspended) and/or role
+// (user|admin). Lockout guards: an admin cannot modify their OWN row, and the
+// OWNER_EMAIL account can never be demoted or suspended.
+router.patch("/admin/users/:userId", async ({ event, params, body }) => {
+  const me = await adminCaller(event);
+  if (params.userId === me.userId) {
+    return badRequest("You cannot change your own role or status.");
+  }
+  const target = await get(T.users, { userId: params.userId });
+  if (!target) return notFound("User not found");
+
+  const next = {};
+  if (body.status !== undefined) {
+    if (!["active", "suspended"].includes(body.status)) {
+      return badRequest("status must be 'active' or 'suspended'");
+    }
+    next.status = body.status;
+  }
+  if (body.role !== undefined) {
+    if (!["user", "admin"].includes(body.role)) {
+      return badRequest("role must be 'user' or 'admin'");
+    }
+    next.role = body.role;
+  }
+  if (!Object.keys(next).length) return badRequest("Nothing to update");
+
+  const isOwner =
+    OWNER_EMAIL && (target.emailLower || target.email || "").toLowerCase() === OWNER_EMAIL;
+  if (isOwner && (next.role === "user" || next.status === "suspended")) {
+    return badRequest("The owner account cannot be demoted or suspended.");
+  }
+
+  const updated = await put(T.users, { ...target, ...next, updatedAt: isoNow() });
+  return ok({ user: userView(updated) });
+});
+
+// POST /admin/users/:userId/reset-usage — zero a user's usage/cost counters.
+router.post("/admin/users/:userId/reset-usage", async ({ event, params }) => {
+  await adminCaller(event);
+  const updated = await resetUsage(params.userId);
+  if (!updated) return notFound("User not found");
+  return ok({ user: userView(updated) });
+});
+
+// GET /admin/relationships — pairing metadata only (no thread content).
+router.get("/admin/relationships", async ({ event }) => {
+  await adminCaller(event);
+  const [relationships, users] = await Promise.all([
+    scan(T.relationships),
+    scan(T.users),
+  ]);
+  const emailOf = new Map(users.map((u) => [u.userId, u.email]));
+  const rels = relationships
+    .map((r) => ({
+      relationshipId: r.relationshipId,
+      label: r.label || "",
+      context: r.context || null,
+      status: r.status || "active",
+      createdAt: r.createdAt || null,
+      paired: !!r.userBId,
+      userA: emailOf.get(r.userAId) || r.userAId || null,
+      userB: r.userBId ? emailOf.get(r.userBId) || r.userBId : null,
+    }))
+    .sort(byCreatedDesc);
+  return ok({ relationships: rels });
+});
+
+// GET /admin/safety-events — the safety hard-stop log (metadata, no messages).
+router.get("/admin/safety-events", async ({ event }) => {
+  await adminCaller(event);
+  const [events, users] = await Promise.all([
+    scan(T.safetyEvents),
+    scan(T.users),
+  ]);
+  const emailOf = new Map(users.map((u) => [u.userId, u.email]));
+  const out = events
+    .map((e) => ({
+      ts: e.ts,
+      category: e.category || null,
+      rationale: e.rationale || null,
+      user: emailOf.get(e.userId) || e.userId || null,
+      relationshipId: e.relationshipId,
+      threadId: e.threadId,
+    }))
+    .sort((a, b) => (b.ts || "").localeCompare(a.ts || ""));
+  return ok({ events: out });
+});
 
 exports.handler = async (event) => router.handle(event);

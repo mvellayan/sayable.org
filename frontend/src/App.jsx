@@ -4,6 +4,7 @@ import { useAuth } from "./auth";
 import SignIn from "./components/SignIn";
 import Home from "./components/Home";
 import InviteAccept from "./components/InviteAccept";
+import Admin from "./components/Admin";
 
 export default function App() {
   const { token, user, loading } = useAuth();
@@ -24,6 +25,10 @@ export default function App() {
   return (
     <Routes>
       <Route path="/invite/:inviteId" element={authed ? <InviteAccept /> : <SignIn />} />
+      <Route
+        path="/admin"
+        element={authed && user.role === "admin" ? <Admin /> : authed ? <Home /> : <SignIn />}
+      />
       <Route path="*" element={authed ? <Home /> : <SignIn />} />
     </Routes>
   );

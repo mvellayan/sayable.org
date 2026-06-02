@@ -80,6 +80,12 @@ async function coachHandler(event, responseStream) {
           active: chunk.active,
           available: chunk.available,
         });
+      } else if (chunk.type === "emotions") {
+        // How this draft is likely to land — rendered as pills.
+        write(responseStream, "emotions", { emotions: chunk.emotions || [] });
+      } else if (chunk.type === "rewrites") {
+        // Ready-to-send rewrites — the UI renders these as one-tap "send this" buttons.
+        write(responseStream, "rewrites", { rewrites: chunk.rewrites || [] });
       } else if (chunk.type === "text_delta") {
         finalText += chunk.text;
         write(responseStream, "text-delta", { text: chunk.text });

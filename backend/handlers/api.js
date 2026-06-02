@@ -46,10 +46,11 @@ const {
   getCurrentObservation,
   buildCoachContext,
   buildMediatorContext,
+  purgeThread,
 } = require("../lib/access");
 const { classifyMessage, SAFETY_MESSAGE } = require("../ai/safety");
 const { generateBeat } = require("../ai/mediator");
-const { generateObservations } = require("../ai/coach");
+const { generateObservations, interpretIncoming } = require("../ai/coach");
 
 const router = new Router();
 
@@ -99,6 +100,68 @@ router.get("/relationships", async ({ event }) => {
     members.map((m) => get(T.relationships, { relationshipId: m.relationshipId }))
   );
   return ok({ relationships: rels.filter(Boolean) });
+});
+
+// --- conversations (flat list across all contacts, WhatsApp-style home) ------
+// Every thread the caller can see, newest-activity first, tagged with its
+// contact (relationship). Shared/metadata only — no message content.
+router.get("/conversations", async ({ event }) => {
+  const user = await caller(event);
+  const members = await query(T.relationshipMembers, {
+    KeyConditionExpression: "userId = :u",
+    ExpressionAttributeValues: { ":u": user.userId },
+  });
+  const rels = (
+    await Promise.all(
+      members.map((m) => get(T.relationships, { relationshipId: m.relationshipId }))
+    )
+  ).filter(Boolean);
+  const threadLists = await Promise.all(
+    rels.map((r) =>
+      query(T.threads, {
+        KeyConditionExpression: "relationshipId = :r",
+        ExpressionAttributeValues: { ":r": r.relationshipId },
+      })
+    )
+  );
+  const conversations = [];
+  rels.forEach((r, i) => {
+    for (const t of threadLists[i]) {
+      if ((t.deletedBy || []).includes(user.userId)) continue; // hidden on my side
+      conversations.push({
+        relationshipId: r.relationshipId,
+        relationshipLabel: r.label || "Us",
+        context: r.context || null,
+        paired: !!r.userBId,
+        threadId: t.threadId,
+        name: t.name,
+        purpose: t.purpose || t.goal || null,
+        status: t.status || "calm",
+        safetyState: t.safetyState || "calm",
+        lastActivityAt: t.lastActivityAt || t.createdAt || null,
+      });
+    }
+  });
+  conversations.sort((a, b) =>
+    (b.lastActivityAt || "").localeCompare(a.lastActivityAt || "")
+  );
+  return ok({ conversations });
+});
+
+// --- me (current user preferences) ------------------------------------------
+// Per-user settings that follow the account across devices. Today: theme.
+router.patch("/me", async ({ event, body }) => {
+  const user = await caller(event);
+  const next = {};
+  if (body.theme !== undefined) {
+    if (!["light", "dark"].includes(body.theme)) {
+      return badRequest("theme must be 'light' or 'dark'");
+    }
+    next.theme = body.theme;
+  }
+  if (!Object.keys(next).length) return badRequest("Nothing to update");
+  await put(T.users, { ...user, ...next, updatedAt: isoNow() });
+  return ok({ ok: true, ...next });
 });
 
 // --- invites (asymmetric onboarding) ----------------------------------------
@@ -208,7 +271,39 @@ router.get("/relationships/:rid/threads", async ({ event, params }) => {
     KeyConditionExpression: "relationshipId = :r",
     ExpressionAttributeValues: { ":r": params.rid },
   });
-  return ok({ threads });
+  // hide threads the caller soft-deleted on their side
+  const visible = threads.filter((t) => !(t.deletedBy || []).includes(user.userId));
+  return ok({ threads: visible });
+});
+
+// DELETE a conversation on MY side. Soft-delete (track in thread.deletedBy);
+// when ALL members have deleted it, hard-purge the thread + all its data.
+router.del("/relationships/:rid/threads/:tid", async ({ event, params }) => {
+  const user = await caller(event);
+  await assertMember(user.userId, params.rid);
+  const thread = await get(T.threads, {
+    relationshipId: params.rid,
+    threadId: params.tid,
+  });
+  if (!thread) return notFound("Thread not found");
+  const rel = await get(T.relationships, { relationshipId: params.rid });
+  const members = [rel && rel.userAId, rel && rel.userBId].filter(Boolean);
+  const deletedBy = new Set(thread.deletedBy || []);
+  deletedBy.add(user.userId);
+  const allGone = members.length > 0 && members.every((m) => deletedBy.has(m));
+  if (allGone) {
+    await purgeThread(params.rid, params.tid, members);
+    return ok({ status: "purged" });
+  }
+  await update(
+    T.threads,
+    { relationshipId: params.rid, threadId: params.tid },
+    {
+      UpdateExpression: "SET deletedBy = :d, updatedAt = :now",
+      ExpressionAttributeValues: { ":d": [...deletedBy], ":now": isoNow() },
+    }
+  );
+  return ok({ status: "hidden" });
 });
 
 // --- messages (shared, sent-only) -------------------------------------------
@@ -338,6 +433,58 @@ router.post(
   }
 );
 
+// --- receiver-side interpretation ("Their Coach", design §8) -----------------
+// When the caller has RECEIVED a charged message, return their private coach's
+// read of it (feeling + meaning + non-escalating response, plus a coercion flag
+// if present). Private to the receiver; the sender never sees it. Reads only the
+// receiver's own context + shared messages (buildCoachContext boundary). Fires on
+// the latest charged INCOMING message; plain messages return null. Stateless —
+// the client dedupes by messageId so it costs one call per new charged message.
+router.post(
+  "/relationships/:rid/threads/:tid/interpret",
+  async ({ event, params }) => {
+    const user = await caller(event);
+    await assertMember(user.userId, params.rid);
+    const thread = await get(T.threads, {
+      relationshipId: params.rid,
+      threadId: params.tid,
+    });
+    if (!thread) return notFound("Thread not found");
+    if (thread.safetyState === "ended") return ok({ interpretation: null });
+
+    const msgs = await listSharedMessages(params.tid, 30);
+    let target = null;
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const m = msgs[i];
+      if (m.senderId !== user.userId && m.charged) {
+        target = m;
+        break;
+      }
+    }
+    if (!target) return ok({ interpretation: null });
+
+    try {
+      const context = await buildCoachContext(user.userId, params.rid, params.tid);
+      const purpose = thread.purpose || thread.goal || null;
+      const { emotions, text } = await interpretIncoming({
+        context,
+        purpose,
+        incomingText: target.text,
+        memberId: user.userId,
+      });
+      if (!text && (!emotions || !emotions.length)) {
+        return ok({ interpretation: null });
+      }
+      return ok({
+        interpretation: { messageId: target.messageId, emotions: emotions || [], text: text || "" },
+      });
+    } catch (e) {
+      console.error("interpret_failed", e?.message || e);
+      return ok({ interpretation: null });
+    }
+  }
+);
+
 // --- send pipeline + safety hard-stop ---------------------------------------
 
 router.post(
@@ -418,6 +565,9 @@ router.post(
       relationshipId: params.rid,
       senderId: user.userId,
       text,
+      // Carry the classifier's `charged` verdict so the RECEIVER's coach knows
+      // which incoming messages are worth interpreting (no re-classify needed).
+      charged: !!verdict.charged,
     };
     try {
       await transactWrite([
@@ -631,6 +781,63 @@ router.post("/admin/users/:userId/reset-usage", async ({ event, params }) => {
   await adminCaller(event);
   const updated = await resetUsage(params.userId);
   if (!updated) return notFound("User not found");
+  return ok({ user: userView(updated) });
+});
+
+// DELETE /admin/users/:userId — REVERSIBLE delete (not a ban). Marks the account
+// status "deleted" (blocks sign-in), removes them from every relationship, and
+// soft-deletes their side of every conversation (purging any where the partner
+// already deleted). Reactivate later via PATCH status:"active"; they rejoin via a
+// fresh invite. Suspend (PATCH status:"suspended") stays a separate pause action.
+router.del("/admin/users/:userId", async ({ event, params }) => {
+  const me = await adminCaller(event);
+  if (params.userId === me.userId) {
+    return badRequest("You cannot delete your own account.");
+  }
+  const target = await get(T.users, { userId: params.userId });
+  if (!target) return notFound("User not found");
+  const isOwner =
+    OWNER_EMAIL && (target.emailLower || target.email || "").toLowerCase() === OWNER_EMAIL;
+  if (isOwner) return badRequest("The owner account cannot be deleted.");
+
+  const memberRows = await query(T.relationshipMembers, {
+    KeyConditionExpression: "userId = :u",
+    ExpressionAttributeValues: { ":u": params.userId },
+  });
+  for (const mr of memberRows) {
+    const rel = await get(T.relationships, { relationshipId: mr.relationshipId });
+    const members = rel ? [rel.userAId, rel.userBId].filter(Boolean) : [params.userId];
+    const threads = await query(T.threads, {
+      KeyConditionExpression: "relationshipId = :r",
+      ExpressionAttributeValues: { ":r": mr.relationshipId },
+    });
+    for (const t of threads) {
+      const deletedBy = new Set(t.deletedBy || []);
+      deletedBy.add(params.userId);
+      if (members.length > 0 && members.every((m) => deletedBy.has(m))) {
+        await purgeThread(mr.relationshipId, t.threadId, members);
+      } else {
+        await update(
+          T.threads,
+          { relationshipId: mr.relationshipId, threadId: t.threadId },
+          {
+            UpdateExpression: "SET deletedBy = :d",
+            ExpressionAttributeValues: { ":d": [...deletedBy] },
+          }
+        );
+      }
+    }
+    await del(T.relationshipMembers, {
+      userId: params.userId,
+      relationshipId: mr.relationshipId,
+    });
+  }
+
+  const updated = await put(T.users, {
+    ...target,
+    status: "deleted",
+    updatedAt: isoNow(),
+  });
   return ok({ user: userView(updated) });
 });
 

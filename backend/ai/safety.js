@@ -12,11 +12,11 @@ const { runTool, MODEL_FAST } = require("../lib/anthropic");
 
 // Exact user-facing copy when safety mode triggers (spec §14). DESIGN.md: this
 // stays calm — ink on surface, no alarm red.
+// Concise on purpose — scannable under the worst circumstances.
 const SAFETY_MESSAGE =
-  "This conversation appears to have escalated into a safety concern. Sayable " +
-  "cannot continue coaching or sending messages in this thread. If anyone is in " +
-  "immediate danger, call emergency services such as 911. Consider pausing this " +
-  "conversation and seeking real-world help.";
+  "Triggered safety concerns. Sayable.org cannot continue. " +
+  "If anyone is in immediate danger, call emergency services such as 911. " +
+  "Consider pausing this conversation and seeking real-world help.";
 
 const SAFETY_TOOL = {
   name: "report_safety",

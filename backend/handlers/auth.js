@@ -186,6 +186,7 @@ function sanitizeUser(u) {
     status: u.status || "active",
     createdAt: u.createdAt,
     lastLoginAt: u.lastLoginAt || null,
+    theme: u.theme || null, // per-user light/dark preference (null = follow device)
   };
 }
 

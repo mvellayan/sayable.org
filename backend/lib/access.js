@@ -28,7 +28,7 @@
 //                 └──────────────────────────────────────────┘
 // =============================================================================
 
-const { get, query, T } = require("./ddb");
+const { get, query, del, T } = require("./ddb");
 
 class AccessError extends Error {
   constructor(message, code = "forbidden") {
@@ -208,6 +208,37 @@ async function buildMediatorContext(relationshipId, threadId, requestingUserId) 
   return { shared: { messages, mediatorSummaries, patterns } };
 }
 
+// --- destructive cascade (mutual-delete purge) -------------------------------
+// Hard-delete every trace of a thread: shared messages + moderator beats + the
+// thread row, plus each member's PRIVATE thread-scoped rows (drafts, reviews,
+// observations). Lives here because this module owns the private tables. Called
+// only when ALL members of the thread have soft-deleted it.
+async function purgeThread(relationshipId, threadId, memberIds = []) {
+  if (!threadId) return;
+  // shared
+  const msgs = await listSharedMessages(threadId, 10000);
+  for (const m of msgs) await del(T.messages, { threadId, ts: m.ts });
+  const beats = await listMediatorSummaries(threadId, 10000);
+  for (const b of beats) await del(T.mediatorSummaries, { threadId, ts: b.ts });
+  // per-member private (owner-keyed)
+  for (const uid of memberIds) {
+    if (!uid) continue;
+    try { await del(T.drafts, { userId: uid, threadId }); } catch (_) {}
+    try { await del(T.observations, { userId: uid, observationId: `cur#${threadId}` }); } catch (_) {}
+    const reviews = await query(T.reviews, {
+      KeyConditionExpression: "userId = :u",
+      ExpressionAttributeValues: { ":u": uid },
+    });
+    for (const r of reviews) {
+      if (r.threadId === threadId) {
+        try { await del(T.reviews, { userId: uid, reviewId: r.reviewId }); } catch (_) {}
+      }
+    }
+  }
+  // the thread row last
+  if (relationshipId) await del(T.threads, { relationshipId, threadId });
+}
+
 module.exports = {
   AccessError,
   assertMember,
@@ -218,6 +249,7 @@ module.exports = {
   getCurrentObservation,
   buildCoachContext,
   buildMediatorContext,
+  purgeThread,
   // exported for unit tests of the boundary
   shareableProfileFields,
 };

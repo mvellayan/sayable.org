@@ -41,6 +41,7 @@ const { resetUsage } = require("../lib/usage");
 const OWNER_EMAIL = (process.env.OWNER_EMAIL || "").toLowerCase();
 const {
   assertMember,
+  partnerIdOf,
   listSharedMessages,
   listMediatorSummaries,
   getCurrentObservation,
@@ -58,6 +59,21 @@ async function caller(event) {
   const c = await getCallerFromEvent(event);
   requireAuth(c); // throws 401
   return c.user;
+}
+
+// A contact is named after the PERSON on the other side (their first name), not
+// the creator's label. Resolve each relationship's partner name for the viewer.
+// Returns Map relationshipId → firstName|null (null when unpaired or unknown).
+async function partnerNames(rels, viewerId) {
+  const ids = [...new Set(rels.map((r) => partnerIdOf(r, viewerId)).filter(Boolean))];
+  const users = await Promise.all(ids.map((id) => get(T.users, { userId: id })));
+  const nameOf = new Map(users.filter(Boolean).map((u) => [u.userId, u.firstName || null]));
+  const out = new Map();
+  for (const r of rels) {
+    const pid = partnerIdOf(r, viewerId);
+    out.set(r.relationshipId, pid ? nameOf.get(pid) || null : null);
+  }
+  return out;
 }
 
 // --- relationships ----------------------------------------------------------
@@ -96,10 +112,18 @@ router.get("/relationships", async ({ event }) => {
     KeyConditionExpression: "userId = :u",
     ExpressionAttributeValues: { ":u": user.userId },
   });
-  const rels = await Promise.all(
-    members.map((m) => get(T.relationships, { relationshipId: m.relationshipId }))
-  );
-  return ok({ relationships: rels.filter(Boolean) });
+  const rels = (
+    await Promise.all(
+      members.map((m) => get(T.relationships, { relationshipId: m.relationshipId }))
+    )
+  ).filter(Boolean);
+  const pn = await partnerNames(rels, user.userId);
+  return ok({
+    relationships: rels.map((r) => ({
+      ...r,
+      partnerName: pn.get(r.relationshipId) || null,
+    })),
+  });
 });
 
 // --- conversations (flat list across all contacts, WhatsApp-style home) ------
@@ -116,14 +140,17 @@ router.get("/conversations", async ({ event }) => {
       members.map((m) => get(T.relationships, { relationshipId: m.relationshipId }))
     )
   ).filter(Boolean);
-  const threadLists = await Promise.all(
-    rels.map((r) =>
-      query(T.threads, {
-        KeyConditionExpression: "relationshipId = :r",
-        ExpressionAttributeValues: { ":r": r.relationshipId },
-      })
-    )
-  );
+  const [threadLists, pn] = await Promise.all([
+    Promise.all(
+      rels.map((r) =>
+        query(T.threads, {
+          KeyConditionExpression: "relationshipId = :r",
+          ExpressionAttributeValues: { ":r": r.relationshipId },
+        })
+      )
+    ),
+    partnerNames(rels, user.userId),
+  ]);
   const conversations = [];
   rels.forEach((r, i) => {
     for (const t of threadLists[i]) {
@@ -131,6 +158,7 @@ router.get("/conversations", async ({ event }) => {
       conversations.push({
         relationshipId: r.relationshipId,
         relationshipLabel: r.label || "Us",
+        partnerName: pn.get(r.relationshipId) || null,
         context: r.context || null,
         paired: !!r.userBId,
         threadId: t.threadId,
@@ -691,6 +719,7 @@ function userView(u) {
     role: u.role || "user",
     status: u.status || "active",
     createdAt: u.createdAt || null,
+    lastInteractionAt: u.lastInteractionAt || null,
     usage: {
       callCount: t.callCount || 0,
       costUsd: Number((t.costUsd || 0).toFixed(4)),

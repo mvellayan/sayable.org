@@ -10,6 +10,7 @@ export default function SignIn() {
   const [stage, setStage] = useState("email"); // email | signup | code
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
@@ -42,6 +43,7 @@ export default function SignIn() {
       const r = await api.signup({
         email: email.trim().toLowerCase(),
         firstName: firstName.trim(),
+        lastName: lastName.trim(),
       });
       if (r.status === "code-sent") {
         setStage("code");
@@ -89,6 +91,10 @@ export default function SignIn() {
           <input
             className="auth__field" placeholder="first name"
             value={firstName} onChange={(e) => setFirstName(e.target.value)} autoFocus required
+          />
+          <input
+            className="auth__field" placeholder="last name"
+            value={lastName} onChange={(e) => setLastName(e.target.value)} required
           />
           <button className="auth__button" disabled={busy}>Create account</button>
         </form>

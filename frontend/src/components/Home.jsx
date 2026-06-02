@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import ThreadView from "./ThreadView";
 import ThemeToggle from "./ThemeToggle";
+import InfoButton from "./InfoButton";
 
 // Home — WhatsApp-shaped, mobile-first single column.
 //
@@ -49,7 +50,11 @@ export default function Home() {
 
   // Open a conversation straight from the flat list.
   function openConversation(c) {
-    setRel({ relationshipId: c.relationshipId, label: c.relationshipLabel });
+    setRel({
+      relationshipId: c.relationshipId,
+      label: c.relationshipLabel,
+      partnerName: c.partnerName,
+    });
     setThread({
       threadId: c.threadId,
       name: c.name,
@@ -111,7 +116,7 @@ export default function Home() {
       <ThreadView
         relationshipId={rel.relationshipId}
         thread={thread}
-        contact={rel.label}
+        contact={rel.partnerName || rel.label}
         onBack={backHome}
       />
     );
@@ -123,14 +128,14 @@ export default function Home() {
       <div className="app">
         <div className="topbar">
           <button className="topbar__link" onClick={backHome}>←</button>
-          <h1 className="topbar__brand">{rel.label}</h1>
+          <h1 className="topbar__brand">{rel.partnerName || rel.label}</h1>
           <span />
         </div>
         <div className="home">
           {!rel.userBId && (
             <section className="invite-card">
               <span className="row__meta">
-                Invite {rel.label} — they join with one tap, no setup.
+                Invite {rel.partnerName || rel.label} — they join with one tap, no setup.
               </span>
               {invite ? (
                 <code className="invite-link">{invite}</code>
@@ -142,7 +147,7 @@ export default function Home() {
             </section>
           )}
           <section>
-            <h2 className="section__title">Conversations with {rel.label}</h2>
+            <h2 className="section__title">Conversations with {rel.partnerName || rel.label}</h2>
             {threads === null ? (
               <div className="empty">…</div>
             ) : threads.length === 0 ? (
@@ -195,6 +200,7 @@ export default function Home() {
           Sayable.org{user?.firstName ? ` - ${user.firstName}` : ""}
         </h1>
         <div className="topbar__actions">
+          <InfoButton />
           <ThemeToggle />
           {user?.role === "admin" && (
             <Link className="topbar__link" to="/admin">admin</Link>
@@ -221,7 +227,7 @@ export default function Home() {
                   >
                     <span className="row__title">
                       {c.name}
-                      <span className="row__contact"> · {c.relationshipLabel}</span>
+                      <span className="row__contact"> · {c.partnerName || c.relationshipLabel}</span>
                     </span>
                     <span className="row__meta">
                       {c.safetyState === "ended" ? "ended" : c.purpose || c.status || "calm"}
@@ -244,7 +250,7 @@ export default function Home() {
               <div className="list">
                 {rels.map((r) => (
                   <button key={r.relationshipId} className="row" onClick={() => openContact(r)}>
-                    <span className="row__title">{r.label}</span>
+                    <span className="row__title">{r.partnerName || r.label}</span>
                     <span className="row__meta">
                       {r.userBId ? "connected" : "invite pending"}
                     </span>

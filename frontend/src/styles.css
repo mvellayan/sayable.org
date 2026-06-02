@@ -638,3 +638,90 @@ button.row { width: 100%; text-align: left; font: inherit; color: inherit; curso
 }
 .coach-aside__nudge:hover { color: var(--ink); border-color: var(--accent); }
 .coach-aside__nudge:disabled { opacity: 0.5; cursor: default; }
+
+/* ---------- info "i" button + how-to-use modal ---------- */
+.info-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  color: var(--ink-muted);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.info-button:hover { color: var(--ink); border-color: var(--ink-muted); }
+
+.info-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: color-mix(in srgb, var(--ink) 38%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s-lg);
+  animation: fade var(--dur) var(--ease-out);
+}
+.info-modal {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  max-height: 85dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: var(--s-xl) var(--s-lg) var(--s-lg);
+}
+.info-modal__close {
+  position: absolute;
+  top: var(--s-sm);
+  right: var(--s-md);
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  font-size: 24px;
+  line-height: 1;
+  padding: var(--s-2xs);
+  cursor: pointer;
+}
+.info-modal__close:hover { color: var(--ink); }
+.info-modal__body { font-family: var(--font-ui); color: var(--ink); }
+.info-modal__title {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 25px;
+  margin: 0 0 var(--s-2xs);
+}
+.info-modal__lede {
+  font-family: var(--font-serif);
+  font-style: italic;
+  color: var(--ink-muted);
+  font-size: 17px;
+  margin: 0 0 var(--s-md);
+}
+.info-modal__body h3 {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  margin: var(--s-md) 0 var(--s-2xs);
+}
+.info-modal__body ul {
+  margin: 0;
+  padding-left: var(--s-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2xs);
+}
+.info-modal__body li { font-size: 15px; line-height: 1.5; }
+.info-modal__foot { margin: var(--s-md) 0 0; font-size: 13px; color: var(--ink-muted); }

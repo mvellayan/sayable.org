@@ -122,7 +122,8 @@ function Users() {
     <table className="admin-table">
       <thead>
         <tr>
-          <th>Email</th><th>Role</th><th>Status</th><th>Joined</th>
+          <th>Email</th><th>Name</th><th>Role</th><th>Status</th>
+          <th>Joined</th><th>Last seen</th>
           <th className="num">Calls</th><th className="num">Cost</th><th>Actions</th>
         </tr>
       </thead>
@@ -133,9 +134,11 @@ function Users() {
           return (
             <tr key={u.userId}>
               <td>{u.email}{isMe && <span className="admin-you"> you</span>}</td>
+              <td>{[u.firstName, u.lastName].filter(Boolean).join(" ") || "—"}</td>
               <td>{u.role}</td>
               <td>{u.status}</td>
               <td className="admin-dim">{when(u.createdAt)}</td>
+              <td className="admin-dim">{u.lastInteractionAt ? when(u.lastInteractionAt) : "—"}</td>
               <td className="num">{u.usage.callCount}</td>
               <td className="num">{money(u.usage.costUsd)}</td>
               <td className="admin-actions">

@@ -3,14 +3,27 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import ThreadView from "./ThreadView";
+import ThemeToggle from "./ThemeToggle";
 
-// Relationships → threads → thread view. State-driven (no nested routes).
+// Home — WhatsApp-shaped, mobile-first single column.
+//
+//   ┌ Conversations (collapsible, open) ─ flat list across all contacts ─┐
+//   │   tap a row → open that conversation (ThreadView)                  │
+//   ├ Contacts (collapsible) ─ your accepted contacts ──────────────────┤
+//   │   tap a contact → their conversations + start-new + invite        │
+//   │   add a contact → name + context, then share an invite link       │
+//   └────────────────────────────────────────────────────────────────────┘
+//
+// Connections are consent-gated: "Contacts" are accepted relationships, never a
+// directory of all users. Context lives on the contact; purpose on each
+// conversation (both condition the agents). Back from any thread returns here.
 export default function Home() {
   const { user, signout } = useAuth();
-  const [rels, setRels] = useState(null);
-  const [rel, setRel] = useState(null);
-  const [threads, setThreads] = useState(null);
-  const [thread, setThread] = useState(null);
+  const [convs, setConvs] = useState(null); // flat conversation list
+  const [rels, setRels] = useState(null); // contacts (relationships)
+  const [rel, setRel] = useState(null); // selected contact (drill-down)
+  const [threads, setThreads] = useState(null); // selected contact's threads
+  const [thread, setThread] = useState(null); // open conversation
   const [newRel, setNewRel] = useState("");
   const [newRelContext, setNewRelContext] = useState("");
   const [newThread, setNewThread] = useState("");
@@ -18,18 +31,47 @@ export default function Home() {
   const [invite, setInvite] = useState(null);
   const [err, setErr] = useState("");
 
-  useEffect(() => { loadRels(); }, []);
+  // Poll so a conversation a contact starts (or accepts into) appears for both
+  // people without a manual reload.
+  useEffect(() => {
+    loadHome();
+    const id = setInterval(loadHome, 5000);
+    return () => clearInterval(id);
+  }, []);
 
-  async function loadRels() {
-    try { const r = await api.relationships(); setRels(r.relationships); }
-    catch (e) { setErr(e.message); }
+  async function loadHome() {
+    try {
+      const [c, r] = await Promise.all([api.conversations(), api.relationships()]);
+      setConvs(c.conversations || []);
+      setRels(r.relationships || []);
+    } catch (e) { setErr(e.message); }
   }
-  async function openRel(r) {
+
+  // Open a conversation straight from the flat list.
+  function openConversation(c) {
+    setRel({ relationshipId: c.relationshipId, label: c.relationshipLabel });
+    setThread({
+      threadId: c.threadId,
+      name: c.name,
+      purpose: c.purpose,
+      status: c.status,
+      safetyState: c.safetyState,
+    });
+  }
+
+  // Drill into a contact to see their conversations / start a new one.
+  async function openContact(r) {
     setRel(r); setThread(null); setInvite(null); setThreads(null);
     try { const t = await api.threads(r.relationshipId); setThreads(t.threads); }
     catch (e) { setErr(e.message); }
   }
-  async function createRel(e) {
+
+  function backHome() {
+    setRel(null); setThread(null); setThreads(null); setInvite(null);
+    loadHome();
+  }
+
+  async function createContact(e) {
     e.preventDefault();
     if (!newRel.trim()) return;
     try {
@@ -38,11 +80,12 @@ export default function Home() {
         context: newRelContext || undefined,
       });
       setNewRel(""); setNewRelContext("");
-      await loadRels();
-      openRel(r.relationship);
+      await loadHome();
+      openContact(r.relationship);
     } catch (e) { setErr(e.message); }
   }
-  async function createThread(e) {
+
+  async function createConversation(e) {
     e.preventDefault();
     if (!newThread.trim() || !rel) return;
     try {
@@ -56,137 +99,182 @@ export default function Home() {
       setThread(t.thread);
     } catch (e) { setErr(e.message); }
   }
+
   async function makeInvite() {
     try { const r = await api.createInvite(rel.relationshipId); setInvite(r.link); }
     catch (e) { setErr(e.message); }
   }
 
+  // --- open conversation -----------------------------------------------------
   if (rel && thread) {
     return (
       <ThreadView
         relationshipId={rel.relationshipId}
         thread={thread}
-        onBack={() => setThread(null)}
+        contact={rel.label}
+        onBack={backHome}
       />
     );
   }
 
+  // --- a contact's conversations (drill-down) --------------------------------
+  if (rel) {
+    return (
+      <div className="app">
+        <div className="topbar">
+          <button className="topbar__link" onClick={backHome}>←</button>
+          <h1 className="topbar__brand">{rel.label}</h1>
+          <span />
+        </div>
+        <div className="home">
+          {!rel.userBId && (
+            <section className="invite-card">
+              <span className="row__meta">
+                Invite {rel.label} — they join with one tap, no setup.
+              </span>
+              {invite ? (
+                <code className="invite-link">{invite}</code>
+              ) : (
+                <button className="btn btn--ghost" onClick={makeInvite}>
+                  Create invite link
+                </button>
+              )}
+            </section>
+          )}
+          <section>
+            <h2 className="section__title">Conversations with {rel.label}</h2>
+            {threads === null ? (
+              <div className="empty">…</div>
+            ) : threads.length === 0 ? (
+              <div className="empty">No conversations yet. What do you want to talk about?</div>
+            ) : (
+              <div className="list">
+                {threads.map((t) => (
+                  <button key={t.threadId} className="row" onClick={() => setThread(t)}>
+                    <span className="row__title">{t.name}</span>
+                    <span className="row__meta">
+                      {t.safetyState === "ended" ? "ended" : t.purpose || t.status || "calm"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+          <form className="inline-form" onSubmit={createConversation}>
+            <input
+              className="field" placeholder="new conversation (e.g. Money, Feeling unheard)"
+              value={newThread} onChange={(e) => setNewThread(e.target.value)}
+            />
+            <input
+              className="field" list="purpose-options"
+              placeholder="purpose (optional)"
+              value={newThreadPurpose}
+              onChange={(e) => setNewThreadPurpose(e.target.value)}
+              title="what is this conversation about (type anything or pick one)"
+            />
+            <datalist id="purpose-options">
+              <option value="planning" />
+              <option value="argument" />
+              <option value="repair" />
+              <option value="feedback" />
+              <option value="conflict" />
+            </datalist>
+            <button className="btn">Add</button>
+          </form>
+          {err && <div className="auth__error">{err}</div>}
+        </div>
+      </div>
+    );
+  }
+
+  // --- home: conversations + contacts ----------------------------------------
   return (
     <div className="app">
       <div className="topbar">
-        <h1 className="topbar__brand">Sayable</h1>
-        {user?.role === "admin" && (
-          <Link className="topbar__link" to="/admin">admin</Link>
-        )}
-        <button className="topbar__link" onClick={signout}>sign out</button>
+        <h1 className="topbar__brand">
+          Sayable.org{user?.firstName ? ` - ${user.firstName}` : ""}
+        </h1>
+        <div className="topbar__actions">
+          <ThemeToggle />
+          {user?.role === "admin" && (
+            <Link className="topbar__link" to="/admin">admin</Link>
+          )}
+          <button className="topbar__link" onClick={signout}>sign out</button>
+        </div>
       </div>
+
       <div className="home">
-        {!rel && (
-          <>
-            <section>
-              <h2 className="section__title">Your relationships</h2>
-              {rels === null ? (
-                <div className="empty">…</div>
-              ) : rels.length === 0 ? (
-                <div className="empty">No relationships yet. Start one below.</div>
-              ) : (
-                <div className="list">
-                  {rels.map((r) => (
-                    <button key={r.relationshipId} className="row" onClick={() => openRel(r)}>
-                      <span className="row__title">{r.label}</span>
-                      <span className="row__meta">
-                        {r.userBId ? "2 people" : "waiting for partner"}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </section>
-            <form className="inline-form" onSubmit={createRel}>
+        <details className="panel" open>
+          <summary className="panel__summary">Conversations</summary>
+          <div className="panel__body">
+            {convs === null ? (
+              <div className="empty">…</div>
+            ) : convs.length === 0 ? (
+              <div className="empty">No conversations yet. Pick a contact below to start one.</div>
+            ) : (
+              <div className="list">
+                {convs.map((c) => (
+                  <button
+                    key={c.threadId}
+                    className="row"
+                    onClick={() => openConversation(c)}
+                  >
+                    <span className="row__title">
+                      {c.name}
+                      <span className="row__contact"> · {c.relationshipLabel}</span>
+                    </span>
+                    <span className="row__meta">
+                      {c.safetyState === "ended" ? "ended" : c.purpose || c.status || "calm"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </details>
+
+        <details className="panel">
+          <summary className="panel__summary">Contacts</summary>
+          <div className="panel__body">
+            {rels === null ? (
+              <div className="empty">…</div>
+            ) : rels.length === 0 ? (
+              <div className="empty">No contacts yet. Add one below and send them an invite.</div>
+            ) : (
+              <div className="list">
+                {rels.map((r) => (
+                  <button key={r.relationshipId} className="row" onClick={() => openContact(r)}>
+                    <span className="row__title">{r.label}</span>
+                    <span className="row__meta">
+                      {r.userBId ? "connected" : "invite pending"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <form className="inline-form" onSubmit={createContact}>
               <input
-                className="field" placeholder="name a relationship (e.g. Us)"
+                className="field" placeholder="add a contact (e.g. Mom, Alex)"
                 value={newRel} onChange={(e) => setNewRel(e.target.value)}
               />
-              <select
-                className="field"
+              <input
+                className="field" list="context-options"
+                placeholder="context (optional)"
                 value={newRelContext}
                 onChange={(e) => setNewRelContext(e.target.value)}
-                title="who you are to each other (skippable)"
-              >
-                <option value="">context (skip)</option>
-                <option value="married">married</option>
-                <option value="partnered">partnered</option>
-                <option value="friends">friends</option>
-                <option value="family">family</option>
-                <option value="co-parenting">co-parenting</option>
-              </select>
-              <button className="btn">Create</button>
-            </form>
-          </>
-        )}
-
-        {rel && (
-          <>
-            <button className="topbar__link" onClick={() => { setRel(null); setThreads(null); }}>
-              ← relationships
-            </button>
-            {!rel.userBId && (
-              <section>
-                <div className="row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px" }}>
-                  <span className="row__meta">
-                    Invite your partner — they join with one tap, no setup.
-                  </span>
-                  {invite ? (
-                    <code style={{ fontSize: 13, wordBreak: "break-all" }}>{invite}</code>
-                  ) : (
-                    <button className="btn btn--ghost" onClick={makeInvite}>
-                      Create invite link
-                    </button>
-                  )}
-                </div>
-              </section>
-            )}
-            <section>
-              <h2 className="section__title">{rel.label} · threads</h2>
-              {threads === null ? (
-                <div className="empty">…</div>
-              ) : threads.length === 0 ? (
-                <div className="empty">No threads yet. What do you want to talk about?</div>
-              ) : (
-                <div className="list">
-                  {threads.map((t) => (
-                    <button key={t.threadId} className="row" onClick={() => setThread(t)}>
-                      <span className="row__title">{t.name}</span>
-                      <span className="row__meta">
-                        {t.safetyState === "ended" ? "ended" : t.status || "calm"}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </section>
-            <form className="inline-form" onSubmit={createThread}>
-              <input
-                className="field" placeholder="new thread (e.g. Money, Feeling unheard)"
-                value={newThread} onChange={(e) => setNewThread(e.target.value)}
+                title="who you are to each other (type anything or pick one)"
               />
-              <select
-                className="field"
-                value={newThreadPurpose}
-                onChange={(e) => setNewThreadPurpose(e.target.value)}
-                title="what is this conversation about (skippable)"
-              >
-                <option value="">purpose (skip)</option>
-                <option value="planning">planning</option>
-                <option value="argument">argument</option>
-                <option value="repair">repair</option>
-                <option value="feedback">feedback</option>
-                <option value="conflict">conflict</option>
-              </select>
+              <datalist id="context-options">
+                <option value="married" />
+                <option value="partnered" />
+                <option value="friends" />
+                <option value="family" />
+                <option value="co-parenting" />
+              </datalist>
               <button className="btn">Add</button>
             </form>
-          </>
-        )}
+          </div>
+        </details>
 
         {err && <div className="auth__error">{err}</div>}
       </div>

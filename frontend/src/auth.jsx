@@ -1,5 +1,12 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { api, configureApi } from "./api";
+import { setTheme } from "./theme";
+
+// Apply the account's saved theme (light/dark) when we learn who the user is, so
+// the preference follows them across devices. null = leave the device default.
+function applyUserTheme(u) {
+  if (u && (u.theme === "light" || u.theme === "dark")) setTheme(u.theme);
+}
 
 const AuthContext = createContext(null);
 
@@ -40,7 +47,10 @@ export function AuthProvider({ children }) {
     api
       .me()
       .then((r) => {
-        if (!cancelled) setUser(r.user);
+        if (!cancelled) {
+          setUser(r.user);
+          applyUserTheme(r.user);
+        }
       })
       .catch(() => {
         if (!cancelled) {
@@ -60,6 +70,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem(TOKEN_KEY, newToken);
     setToken(newToken);
     setUser(u);
+    applyUserTheme(u);
   }
 
   function signout() {

@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { openCoachStream } from "../coachStream";
+import ThemeToggle from "./ThemeToggle";
+import Pills from "./Pills";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // ThreadView — the two-sided conversation surface.
@@ -24,13 +26,15 @@ import { openCoachStream } from "../coachStream";
 // ──────────────────────────────────────────────────────────────────────────────
 
 const DEFAULT_SAFETY =
-  "This conversation appears to have escalated into a safety concern. Sayable " +
-  "cannot continue coaching or sending messages in this thread. If anyone is in " +
-  "immediate danger, call emergency services such as 911. Consider pausing this " +
-  "conversation and seeking real-world help.";
+  "Triggered safety concerns. Sayable.org cannot continue. " +
+  "If anyone is in immediate danger, call emergency services such as 911. " +
+  "Consider pausing this conversation and seeking real-world help.";
 
-export default function ThreadView({ relationshipId, thread, onBack }) {
+export default function ThreadView({ relationshipId, thread, contact, onBack }) {
   const { user, token } = useAuth();
+  // Header: "{you} - {contact}: {thread title}"
+  const titlePrefix = [user?.firstName, contact].filter(Boolean).join(" - ");
+  const headerTitle = titlePrefix ? `${titlePrefix}: ${thread.name}` : thread.name;
   const [messages, setMessages] = useState([]);
   const [beats, setBeats] = useState([]);
   const [safety, setSafety] = useState(thread.safetyState || "calm");
@@ -46,9 +50,16 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
   const [activeSkills, setActiveSkills] = useState([]);
   const [availableSkills, setAvailableSkills] = useState([]);
   const [showNudge, setShowNudge] = useState(false);
+  // Emotion pills: how the current draft is likely to land.
+  const [reviewEmotions, setReviewEmotions] = useState([]);
+  // Ready-to-send rewrites from the coach — one tap sends + clears the draft.
+  const [rewrites, setRewrites] = useState([]);
   // Current observations (decision 2): always-on, about you + the dynamic.
   const [observation, setObservation] = useState(null);
   const [obsLoading, setObsLoading] = useState(false);
+  // Receiver-side interpretation ("Their Coach"): { messageId: text }, private.
+  const [interpretations, setInterpretations] = useState({});
+  const interpRequested = useRef(new Set());
   const endRef = useRef(null);
 
   async function load() {
@@ -82,6 +93,30 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [timeline.length]);
 
+  // Receiver-side: when a charged message arrives from the partner, fetch my
+  // private coach's read of it once per message and show it under that message.
+  useEffect(() => {
+    const inc = [...messages]
+      .reverse()
+      .find((m) => m.senderId !== user.userId && m.charged);
+    if (!inc || interpRequested.current.has(inc.messageId)) return;
+    interpRequested.current.add(inc.messageId);
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await api.interpret(relationshipId, thread.threadId);
+        if (cancelled || !r.interpretation) return;
+        setInterpretations((prev) => ({
+          ...prev,
+          [r.interpretation.messageId]: r.interpretation, // { emotions, text }
+        }));
+      } catch (_) {
+        /* best-effort — interpretation is never load-bearing */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [messages, user.userId, relationshipId, thread.threadId]);
+
   // Current observations: load the stored one instantly, then regenerate.
   async function loadObs() {
     try {
@@ -114,6 +149,8 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
   async function streamReview(text, skill) {
     setReview("");
     setActiveSkills([]);
+    setReviewEmotions([]);
+    setRewrites([]);
     setShowNudge(false);
     setReviewing(true);
     setErr("");
@@ -128,6 +165,10 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
         if (ev.type === "skills") {
           setActiveSkills(ev.active || []);
           setAvailableSkills(ev.available || []);
+        } else if (ev.type === "emotions") {
+          setReviewEmotions(ev.emotions || []);
+        } else if (ev.type === "rewrites") {
+          setRewrites(ev.rewrites || []);
         } else if (ev.type === "text-delta") setReview((p) => p + ev.text);
         else if (ev.type === "error") setErr(ev.error);
       }
@@ -171,6 +212,8 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
         setDraft("");
         setReview("");
         setActiveSkills([]);
+        setReviewEmotions([]);
+        setRewrites([]);
         await load();
         refreshObs(); // decision 4: refresh observations after send
       } else if (r.status === "ended") {
@@ -188,13 +231,61 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
     }
   }
 
+  // One-tap send of a coach rewrite: send it as-is and clear the compose area.
+  // confirm:true — the user explicitly chose a reviewed message (server still
+  // re-checks the safety hard-stop on every commit).
+  async function sendRewrite(text) {
+    const t = (text || "").trim();
+    if (!t || sending) return;
+    setSending(true);
+    setErr("");
+    try {
+      const r = await api.send(relationshipId, thread.threadId, t, { confirm: true });
+      if (r.status === "sent") {
+        setDraft("");
+        setReview("");
+        setActiveSkills([]);
+        setReviewEmotions([]);
+        setRewrites([]);
+        await load();
+        refreshObs();
+      } else if (r.status === "ended") {
+        setSafety("ended");
+        setSafetyMsg(r.safetyMessage || "");
+      }
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
   // Editing the draft invalidates any review (it was about the old text).
   function onDraftChange(e) {
     setDraft(e.target.value);
     if (review) {
       setReview("");
       setActiveSkills([]);
+      setReviewEmotions([]);
+      setRewrites([]);
       setShowNudge(false);
+    }
+  }
+
+  // Delete this conversation on MY side. If the partner also deletes it, the
+  // server purges it for good. Returns to the home list afterward.
+  async function removeConversation() {
+    if (
+      !window.confirm(
+        "Delete this conversation on your side? If your partner also deletes it, it's removed for good."
+      )
+    )
+      return;
+    try {
+      await api.deleteThread(relationshipId, thread.threadId);
+      onBack();
+    } catch (e) {
+      setErr(e.message);
     }
   }
 
@@ -221,7 +312,7 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
         <button className="topbar__link" onClick={onBack}>
           ←
         </button>
-        <span className="thread__name">{thread.name}</span>
+        <span className="thread__name">{headerTitle}</span>
         {!ended && (
           <button
             className="topbar__link"
@@ -232,6 +323,14 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
             {askingModerator ? "…" : "Where are we?"}
           </button>
         )}
+        <button
+          className="topbar__link"
+          onClick={removeConversation}
+          title="Delete this conversation on your side"
+        >
+          delete
+        </button>
+        <ThemeToggle />
       </div>
 
       <div className="messages">
@@ -252,14 +351,23 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
           }
           const m = item.data;
           const mine = m.senderId === user.userId;
+          const interp = !mine ? interpretations[m.messageId] : null;
           return (
-            <div
-              key={m.messageId || m.ts}
-              className={`msg ${mine ? "msg--me" : ""}`}
-            >
-              <span className="msg__who">{mine ? "You" : "Your partner"}</span>
-              <div className="msg__body">{m.text}</div>
-            </div>
+            <React.Fragment key={m.messageId || m.ts}>
+              <div className={`msg ${mine ? "msg--me" : ""}`}>
+                <span className="msg__who">{mine ? "You" : "Your partner"}</span>
+                <div className="msg__body">{m.text}</div>
+              </div>
+              {interp && (interp.emotions?.length || interp.text) && (
+                <div className="coach-aside coach-aside--incoming">
+                  <span className="coach-aside__label">
+                    your coach · only you see this
+                  </span>
+                  <Pills emotions={interp.emotions} />
+                  {interp.text && <div className="coach-aside__text">{interp.text}</div>}
+                </div>
+              )}
+            </React.Fragment>
           );
         })}
         <div ref={endRef} />
@@ -267,7 +375,10 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
 
       {ended && (
         <div className="safety">
-          <strong>This thread has ended.</strong> {safetyMsg || DEFAULT_SAFETY}
+          <Pills safety />
+          <div>
+            <strong>Thread ended.</strong> {safetyMsg || DEFAULT_SAFETY}
+          </div>
         </div>
       )}
 
@@ -289,18 +400,21 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
               <span className="coach-aside__label">
                 your coach · only you see this
               </span>
-              {activeSkills.length > 0 && (
+              <Pills emotions={reviewEmotions} />
+              {availableSkills.length > 0 && (
                 <div className="coach-aside__skills">
-                  <span className="coach-aside__leaning">
-                    leaning on: {activeSkills.map((s) => s.label).join(" · ")}
-                  </span>
+                  {activeSkills.length > 0 && (
+                    <span className="coach-aside__leaning">
+                      leaning on: {activeSkills.map((s) => s.label).join(" · ")}
+                    </span>
+                  )}
                   <button
                     type="button"
                     className="coach-aside__nudge"
                     onClick={() => setShowNudge((v) => !v)}
                     disabled={reviewing}
                   >
-                    nudge
+                    {activeSkills.length > 0 ? "nudge ▾" : "nudge a skill ▾"}
                   </button>
                   {showNudge && (
                     <div className="coach-aside__nudge-row">
@@ -325,6 +439,23 @@ export default function ThreadView({ relationshipId, thread, onBack }) {
               <div className="coach-aside__text">
                 {review || (reviewing ? "Reading…" : "")}
               </div>
+              {rewrites.length > 0 && (
+                <div className="rewrites">
+                  {rewrites.map((r, i) => (
+                    <button
+                      key={`${r.label}-${i}`}
+                      type="button"
+                      className="rewrite"
+                      onClick={() => sendRewrite(r.text)}
+                      disabled={sending}
+                      title="Send this version"
+                    >
+                      <span className="rewrite__label">{r.label}</span>
+                      <span className="rewrite__text">{r.text}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
           <textarea

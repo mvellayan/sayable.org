@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import ThemeToggle from "./ThemeToggle";
 
 // Admin console — operational only (Sayable original; independent implementation,
 // not copied from any other project). It reads accounts, usage, pairing metadata,
@@ -22,7 +23,10 @@ export default function Admin() {
       <div className="topbar">
         <Link className="topbar__link" to="/">←</Link>
         <h1 className="topbar__brand">Admin</h1>
-        <button className="topbar__link" onClick={signout}>sign out</button>
+        <div className="topbar__actions">
+          <ThemeToggle />
+          <button className="topbar__link" onClick={signout}>sign out</button>
+        </div>
       </div>
 
       <nav className="admin-tabs">
@@ -154,6 +158,13 @@ function Users() {
                     <button className="admin-btn" disabled={b}
                       onClick={() => act(() => api.adminResetUsage(u.userId), u.userId)}>
                       reset usage
+                    </button>
+                    <button className="admin-btn admin-btn--danger" disabled={b}
+                      onClick={() => {
+                        if (window.confirm(`Delete ${u.email}? Reversible — they can be re-added later, not banned.`))
+                          act(() => api.adminDeleteUser(u.userId), u.userId);
+                      }}>
+                      delete
                     </button>
                   </>
                 )}

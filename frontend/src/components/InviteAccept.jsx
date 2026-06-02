@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../api";
+import ThemeToggle from "./ThemeToggle";
 
 // Reached at /invite/:inviteId once the user is signed in. One step to join.
 export default function InviteAccept() {
@@ -20,7 +21,8 @@ export default function InviteAccept() {
 
   return (
     <div className="auth">
-      <h1 className="auth__brand">Sayable</h1>
+      <ThemeToggle className="theme-toggle--corner" />
+      <h1 className="auth__brand">Sayable.org</h1>
       {state === "accepting" && <div className="auth__status">Connecting you…</div>}
       {state === "done" && (
         <>

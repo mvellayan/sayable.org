@@ -17,8 +17,29 @@
     />
     <title>Sayable</title>
     <meta name="description" content="Say the hard thing so it can actually be heard." />
+    <!-- Theme: set data-theme before paint so dark users never see a light flash.
+         localStorage override, else the OS preference. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("sayable.theme");
+          if (t !== "light" && t !== "dark") {
+            t =
+              window.matchMedia &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light";
+          }
+          document.documentElement.setAttribute("data-theme", t);
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (m) m.setAttribute("content", t === "dark" ? "#17140F" : "#F6F2EA");
+        } catch (e) {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      })();
+    </script>
   </head>
-  <body data-theme="light">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

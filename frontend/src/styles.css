@@ -491,3 +491,150 @@ button.row { width: 100%; text-align: left; font: inherit; color: inherit; curso
 }
 .admin-btn:hover { color: var(--ink); border-color: var(--ink-muted); }
 .admin-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* ---------- home: collapsible panels (Conversations / Contacts) ---------- */
+.panel { border-bottom: 1px solid var(--hairline); padding-bottom: var(--s-md); }
+.panel:last-of-type { border-bottom: none; }
+.panel__summary {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: var(--s-xs);
+  padding: var(--s-xs) 0;
+}
+.panel__summary::-webkit-details-marker { display: none; }
+.panel__summary::before {
+  content: "\203A"; /* › */
+  display: inline-block;
+  transition: transform var(--dur) var(--ease-out);
+  color: var(--ink-muted);
+}
+.panel[open] > .panel__summary::before { transform: rotate(90deg); }
+.panel__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-sm);
+  padding-top: var(--s-sm);
+}
+
+/* contact tag inside a conversation row — quiet sans next to the serif title */
+.row__contact { font-family: var(--font-ui); font-size: 14px; color: var(--ink-muted); }
+
+/* invite card in the contact drill-down */
+.invite-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-sm);
+  padding: var(--s-md);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.invite-link { font-size: 13px; word-break: break-all; color: var(--ink); }
+
+/* admin delete — danger affordance uses warning ochre, never alarm red (DESIGN.md) */
+.admin-btn--danger { color: var(--warning); border-color: var(--warning); }
+.admin-btn--danger:hover { color: var(--warning); border-color: var(--warning); opacity: 0.8; }
+
+/* ---------- theme toggle (sun/moon) ---------- */
+.topbar__actions { display: flex; align-items: center; gap: var(--s-md); }
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  padding: var(--s-2xs);
+  line-height: 0;
+  cursor: pointer;
+  transition: color var(--dur) var(--ease-out);
+}
+.theme-toggle:hover { color: var(--ink); }
+.theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-sm); }
+.theme-toggle--corner {
+  position: fixed;
+  top: calc(var(--s-md) + env(safe-area-inset-top, 0px));
+  right: calc(var(--s-md) + env(safe-area-inset-right, 0px));
+  z-index: 10;
+}
+
+/* thread header: title flexes so the action buttons (+ theme toggle) sit right */
+.thread__head .thread__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thread__head { gap: var(--s-sm); flex-wrap: wrap; }
+
+/* ---------- emotion pills (warm tints; no red, no blue, never clinical) ---------- */
+.pills { display: flex; flex-wrap: wrap; gap: var(--s-2xs); margin-bottom: var(--s-2xs); }
+.pill {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--hairline) 80%, transparent);
+  color: var(--ink);
+  background: var(--surface);
+  white-space: nowrap;
+}
+.pill--tense      { background: color-mix(in srgb, var(--warning) 16%, var(--surface)); }
+.pill--vulnerable { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
+.pill--warm       { background: color-mix(in srgb, var(--success) 16%, var(--surface)); }
+.pill--neutral    { background: var(--surface); }
+.pill--safety {
+  background: color-mix(in srgb, var(--warning) 22%, var(--surface));
+  border-color: color-mix(in srgb, var(--warning) 45%, var(--hairline));
+}
+
+/* ---------- coach rewrites — one-tap "send this version" ---------- */
+.rewrites { display: flex; flex-direction: column; gap: var(--s-2xs); margin-top: var(--s-xs); }
+.rewrite {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: var(--s-sm) var(--s-md);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease-out);
+}
+.rewrite:hover { border-color: var(--accent); }  /* a rewrite IS a send action */
+.rewrite:disabled { opacity: 0.5; cursor: default; }
+.rewrite__label {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-muted);
+}
+.rewrite__text {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+/* nudge button — a visible pill (was tiny underlined text; easy to miss) */
+.coach-aside__nudge {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 3px 12px;
+}
+.coach-aside__nudge:hover { color: var(--ink); border-color: var(--accent); }
+.coach-aside__nudge:disabled { opacity: 0.5; cursor: default; }

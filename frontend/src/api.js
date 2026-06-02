@@ -45,6 +45,9 @@ async function request(path, opts = {}) {
 }
 
 export const api = {
+  // me / preferences
+  saveTheme: (theme) => request("/me", { method: "PATCH", body: { theme } }),
+
   // auth
   requestOtp: (email) => request("/auth/request-otp", { method: "POST", body: { email } }),
   signup: (body) => request("/auth/signup", { method: "POST", body }),
@@ -63,6 +66,11 @@ export const api = {
   threads: (rid) => request(`/relationships/${rid}/threads`),
   createThread: (rid, body) =>
     request(`/relationships/${rid}/threads`, { method: "POST", body }),
+  // flat conversation list across all contacts (home screen)
+  conversations: () => request("/conversations"),
+  // delete a conversation on my side (purged when both sides delete)
+  deleteThread: (rid, tid) =>
+    request(`/relationships/${rid}/threads/${tid}`, { method: "DELETE" }),
 
   // messages + draft + send
   messages: (rid, tid) => request(`/relationships/${rid}/threads/${tid}/messages`),
@@ -83,6 +91,10 @@ export const api = {
   requestModerator: (rid, tid) =>
     request(`/relationships/${rid}/threads/${tid}/moderator`, { method: "POST" }),
 
+  // Receiver-side: my private coach's read of the latest charged message I received.
+  interpret: (rid, tid) =>
+    request(`/relationships/${rid}/threads/${tid}/interpret`, { method: "POST" }),
+
   // Current observations (private; about you + the dynamic). GET reads the stored
   // one instantly; POST regenerates it (called on thread-open and after send).
   getObservations: (rid, tid) =>
@@ -97,6 +109,8 @@ export const api = {
     request(`/admin/users/${userId}`, { method: "PATCH", body: patch }),
   adminResetUsage: (userId) =>
     request(`/admin/users/${userId}/reset-usage`, { method: "POST" }),
+  adminDeleteUser: (userId) =>
+    request(`/admin/users/${userId}`, { method: "DELETE" }),
   adminRelationships: () => request("/admin/relationships"),
   adminSafetyEvents: () => request("/admin/safety-events"),
 };

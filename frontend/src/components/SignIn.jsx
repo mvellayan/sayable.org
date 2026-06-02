@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import ThemeToggle from "./ThemeToggle";
 
 // Open signup + email-OTP. Unknown email → name form → signup (creates the
 // account and sends a code) → code → in. No admin approval.
@@ -68,7 +69,8 @@ export default function SignIn() {
 
   return (
     <div className="auth">
-      <h1 className="auth__brand">Sayable</h1>
+      <ThemeToggle className="theme-toggle--corner" />
+      <h1 className="auth__brand">Sayable.org</h1>
       <p className="auth__tagline">Say the hard thing so it can actually be heard.</p>
 
       {stage === "email" && (

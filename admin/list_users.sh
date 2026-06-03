@@ -17,8 +17,8 @@ require_cmd aws jq column
 PREFIX="${TABLE_PREFIX:-Sayable}"
 USERS="${PREFIX}Users"
 
-# One TSV row per user; empty fields become "-" so columns stay aligned. Dates
-# are trimmed to the day.
+# One TSV row per user; empty fields become "-" so columns stay aligned.
+# CREATED / LAST_SEEN show date + time of day (UTC), trimmed to the minute.
 row_filter='
   .Items[]
   | {
@@ -26,8 +26,8 @@ row_filter='
       name:  (((.firstName.S // "") + " " + (.lastName.S // "")) | gsub("^ +| +$";"")),
       role:  (.role.S // "user"),
       status:(.status.S // "-"),
-      created:((.createdAt.S // "") | split("T")[0]),
-      seen:  ((.lastInteractionAt.S // "") | split("T")[0])
+      created:((.createdAt.S // "") | .[0:16] | sub("T";" ")),
+      seen:  ((.lastInteractionAt.S // "") | .[0:16] | sub("T";" "))
     }
   | [ .email,
       (if .name == "" then "-" else .name end),

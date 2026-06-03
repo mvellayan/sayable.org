@@ -1,7 +1,36 @@
 {
   "permissions": {
     "allow": [
-      "Bash(~/.claude/skills/gstack/bin/gstack-review-read)"
+      "Bash(~/.claude/skills/gstack/bin/gstack-review-read)",
+      "Bash(command -v rsync)",
+      "Bash(rsync -a --exclude node_modules --exclude .git --exclude dist --exclude cdk.out --exclude .next --exclude .env --exclude .DS_Store --exclude *.bak __TRACKED_VAR__/__TRACKED_VAR__/ ./__TRACKED_VAR__/)",
+      "Bash(cp __TRACKED_VAR__/.gitignore ./.gitignore)",
+      "Bash(git add *)",
+      "Bash(grep -E 'node_modules|/\\\\.env$')",
+      "Bash(git commit -q -m ' *)",
+      "Bash(npm install *)",
+      "Bash(node -e 'require\\('\\\\''./__TRACKED_VAR__.js'\\\\''\\); console.log\\('\\\\''OK  __TRACKED_VAR__'\\\\''\\)')",
+      "Bash(node --test test/access.test.js)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(~/.claude/skills/gstack/bin/gstack-learnings-log '{\"skill\":\"plan-eng-review\",\"type\":\"tool\",\"key\":\"bettervibe-access-test-stub\",\"insight\":\"To unit-test backend/lib/access.js without AWS: set the *_TABLE env vars, then require\\(../lib/ddb\\), then overwrite ddb.get/ddb.query with in-memory stubs, THEN require\\(../lib/access\\). access.js destructures get/query from ddb at load, so as long as the stubs are installed before the first require of access, the destructured refs are the stubs. node --test, no network. 6 boundary tests in backend/test/access.test.js.\",\"confidence\":8,\"source\":\"observed\",\"files\":[\"backend/test/access.test.js\",\"backend/lib/access.js\",\"backend/lib/ddb.js\"]}')",
+      "Bash(npm run *)",
+      "Bash(node -e 'require\\('\\\\''./__TRACKED_VAR__.js'\\\\''\\)')",
+      "Skill(plan-eng-review)",
+      "Skill(plan-design-review)",
+      "Bash(node --test)",
+      "Bash(~/.claude/skills/gstack/bin/gstack-slug)",
+      "Bash(echo \"gstack-slug: $\\(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null\\)\")",
+      "Bash(~/.claude/skills/gstack/browse/bin/remote-slug)",
+      "Bash(echo \"remote-slug: $\\(~/.claude/skills/gstack/browse/bin/remote-slug 2>/dev/null\\)\")",
+      "Read(//Users/muthu/.claude/skills/gstack/browse/bin/**)",
+      "Bash(git commit -q -m 'docs\\(readme\\): point build-sequencing at current design doc \\(slug-robust\\) *)",
+      "Bash(git commit *)",
+      "Bash(aws sesv2 create-email-identity *)",
+      "Bash(aws route53 *)",
+      "Bash(aws sesv2 *)",
+      "Bash(aws ses *)",
+      "Bash(aws logs *)"
     ]
   }
 }

@@ -2,18 +2,16 @@
 # Send a file to someone as an email, from sayable.org (Amazon SES).
 #
 # Usage:
-#   ./admin/send_email.sh <to-email> <file> [subject]
+#   ./admin/send_email.sh <to-email> <subject> <file>
 #
 # Examples:
-#   ./admin/send_email.sh sam@example.com frontend/src/instructions.md
-#   ./admin/send_email.sh sam@example.com note.html "Welcome to Sayable"
+#   ./admin/send_email.sh sam@example.com "How Sayable works" frontend/src/instructions.md
+#   ./admin/send_email.sh sam@example.com "Welcome to Sayable" note.html
 #
 # Behaviour:
 #   - .html / .htm files are sent as an HTML body; anything else as plain text.
 #   - The sender is NOTIFICATION_SENDER_EMAIL (falls back to OTP_SENDER_EMAIL),
 #     read from aws/.env. The "From" name is APP_BRAND.
-#   - Subject defaults to the file's first "# " markdown heading, else its first
-#     non-empty line, else "A message from <brand>". Pass a 3rd arg to override.
 #
 # Note: if the SES account is still in the sandbox, the recipient must be a
 # verified identity. This account has production access, so any recipient works.
@@ -26,11 +24,11 @@ source "$SCRIPT_DIR/../aws/_lib.sh"
 require_cmd aws jq
 
 TO="${1:-}"
-FILE="${2:-}"
-SUBJECT_ARG="${3:-}"
+SUBJECT="${2:-}"
+FILE="${3:-}"
 
-if [ -z "$TO" ] || [ -z "$FILE" ]; then
-  err "Usage: ./admin/send_email.sh <to-email> <file> [subject]"
+if [ -z "$TO" ] || [ -z "$SUBJECT" ] || [ -z "$FILE" ]; then
+  err "Usage: ./admin/send_email.sh <to-email> <subject> <file>"
   exit 1
 fi
 case "$TO" in
@@ -49,15 +47,6 @@ if [ -z "$SENDER" ]; then
   exit 1
 fi
 FROM="$BRAND <$SENDER>"
-
-# Subject: explicit arg → first markdown H1 → first non-empty line → fallback.
-if [ -n "$SUBJECT_ARG" ]; then
-  SUBJECT="$SUBJECT_ARG"
-else
-  SUBJECT="$(grep -m1 '^# ' "$FILE" 2>/dev/null | sed 's/^# //' || true)"
-  [ -z "$SUBJECT" ] && SUBJECT="$(grep -m1 . "$FILE" 2>/dev/null | cut -c1-150 || true)"
-  [ -z "$SUBJECT" ] && SUBJECT="A message from $BRAND"
-fi
 
 # Text body unless the file is HTML.
 case "$FILE" in

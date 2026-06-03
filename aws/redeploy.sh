@@ -55,24 +55,30 @@ if [ "$MODE" = "all" ] || [ "$MODE" = "frontend" ]; then
     npm run build
   )
   info "Syncing frontend to s3://$FRONTEND_BUCKET ..."
+  # Hashed assets are immutable (1yr). The service worker + its registrar + the
+  # entry HTML + manifest MUST stay revalidated, or the PWA pins users to an old
+  # build forever. vite-plugin-pwa emits sw.js and registerSW.js (NOT
+  # service-worker.js) — get these names right or deploys never reach users.
   aws s3 sync "$ROOT_DIR/frontend/dist/" "s3://$FRONTEND_BUCKET/" \
     --region "$AWS_REGION" \
     --delete \
     --cache-control "public, max-age=31536000, immutable" \
     --exclude "index.html" \
-    --exclude "service-worker.js" \
+    --exclude "sw.js" \
+    --exclude "registerSW.js" \
     --exclude "*.webmanifest"
   aws s3 sync "$ROOT_DIR/frontend/dist/" "s3://$FRONTEND_BUCKET/" \
     --region "$AWS_REGION" \
     --cache-control "public, max-age=0, must-revalidate" \
     --exclude "*" \
     --include "index.html" \
-    --include "service-worker.js" \
+    --include "sw.js" \
+    --include "registerSW.js" \
     --include "*.webmanifest"
   info "Invalidating CloudFront ($DIST_ID)..."
   aws cloudfront create-invalidation \
     --distribution-id "$DIST_ID" \
-    --paths "/index.html" "/service-worker.js" "/*.webmanifest" >/dev/null
+    --paths "/index.html" "/sw.js" "/registerSW.js" "/*.webmanifest" >/dev/null
 fi
 
 ok "Redeploy complete."

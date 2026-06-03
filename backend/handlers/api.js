@@ -117,12 +117,39 @@ router.get("/relationships", async ({ event }) => {
       members.map((m) => get(T.relationships, { relationshipId: m.relationshipId }))
     )
   ).filter(Boolean);
-  const pn = await partnerNames(rels, user.userId);
+  // Surface a per-contact conversation count + freshness so the home list can
+  // show "3" and sort without a second round-trip. Count only threads visible
+  // to the caller (a thread I deleted on my side doesn't count for me).
+  const [threadLists, pn] = await Promise.all([
+    Promise.all(
+      rels.map((r) =>
+        query(T.threads, {
+          KeyConditionExpression: "relationshipId = :r",
+          ExpressionAttributeValues: { ":r": r.relationshipId },
+        })
+      )
+    ),
+    partnerNames(rels, user.userId),
+  ]);
   return ok({
-    relationships: rels.map((r) => ({
-      ...r,
-      partnerName: pn.get(r.relationshipId) || null,
-    })),
+    relationships: rels.map((r, i) => {
+      const visible = threadLists[i].filter(
+        (t) => !(t.deletedBy || []).includes(user.userId)
+      );
+      const lastActivityAt = visible.reduce(
+        (max, t) => {
+          const ts = t.lastActivityAt || t.createdAt || "";
+          return ts > max ? ts : max;
+        },
+        ""
+      );
+      return {
+        ...r,
+        partnerName: pn.get(r.relationshipId) || null,
+        threadCount: visible.length,
+        lastActivityAt: lastActivityAt || null,
+      };
+    }),
   });
 });
 

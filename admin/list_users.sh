@@ -18,23 +18,31 @@ PREFIX="${TABLE_PREFIX:-Sayable}"
 USERS="${PREFIX}Users"
 
 # One TSV row per user; empty fields become "-" so columns stay aligned.
-# CREATED / LAST_SEEN show date + time of day (UTC), trimmed to the minute.
+# CREATED / LAST_SEEN show date + local time of day (your TZ), to the minute.
+# localts: stored UTC ISO (e.g. 2026-06-01T08:30:42.512Z) → local "YYYY-MM-DD
+# HH:MM" via the TZ environment. Normalize to seconds (drop fractions/Z) before
+# fromdateiso8601, and swallow any parse error as "-".
 row_filter='
+  def localts:
+    if . == "" then "-"
+    else (try (.[0:19] + "Z" | fromdateiso8601 | localtime | strftime("%Y-%m-%d %H:%M"))
+          catch "-")
+    end;
   .Items[]
   | {
       email: (.email.S // .emailLower.S // "-"),
       name:  (((.firstName.S // "") + " " + (.lastName.S // "")) | gsub("^ +| +$";"")),
       role:  (.role.S // "user"),
       status:(.status.S // "-"),
-      created:((.createdAt.S // "") | .[0:16] | sub("T";" ")),
-      seen:  ((.lastInteractionAt.S // "") | .[0:16] | sub("T";" "))
+      created:((.createdAt.S // "") | localts),
+      seen:  ((.lastInteractionAt.S // "") | localts)
     }
   | [ .email,
       (if .name == "" then "-" else .name end),
       .role,
       .status,
-      (if .created == "" then "-" else .created end),
-      (if .seen == "" then "-" else .seen end)
+      .created,
+      .seen
     ]
   | @tsv
 '

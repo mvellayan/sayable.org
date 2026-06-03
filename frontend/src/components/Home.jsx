@@ -2,28 +2,24 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { relativeTime } from "../time";
 import ThreadView from "./ThreadView";
 import ThemeToggle from "./ThemeToggle";
 import InfoButton from "./InfoButton";
 
-// Home — WhatsApp-shaped, mobile-first single column.
+// Home — contacts-first.
 //
-//   ┌ Conversations (collapsible, open) ─ flat list across all contacts ─┐
-//   │   tap a row → open that conversation (ThreadView)                  │
-//   ├ Contacts (collapsible) ─ your accepted contacts ──────────────────┤
-//   │   tap a contact → their conversations + start-new + invite        │
-//   │   add a contact → name + context, then share an invite link       │
-//   └────────────────────────────────────────────────────────────────────┘
+//   logged in → Contacts (their real first name once connected)
+//             → tap a contact → their Conversations (2-line: title + stats)
+//             → tap a conversation → the chat (ThreadView)
 //
-// Connections are consent-gated: "Contacts" are accepted relationships, never a
-// directory of all users. Context lives on the contact; purpose on each
-// conversation (both condition the agents). Back from any thread returns here.
+// A contact is named after the partner's first name once they accept the invite
+// (resolved server-side); until then it shows the temporary label you typed.
 export default function Home() {
   const { user, signout } = useAuth();
-  const [convs, setConvs] = useState(null); // flat conversation list
-  const [rels, setRels] = useState(null); // contacts (relationships)
-  const [rel, setRel] = useState(null); // selected contact (drill-down)
-  const [threads, setThreads] = useState(null); // selected contact's threads
+  const [rels, setRels] = useState(null); // contacts
+  const [rel, setRel] = useState(null); // selected contact
+  const [threads, setThreads] = useState(null); // selected contact's conversations
   const [thread, setThread] = useState(null); // open conversation
   const [newRel, setNewRel] = useState("");
   const [newRelContext, setNewRelContext] = useState("");
@@ -32,48 +28,44 @@ export default function Home() {
   const [invite, setInvite] = useState(null);
   const [err, setErr] = useState("");
 
-  // Poll so a conversation a contact starts (or accepts into) appears for both
-  // people without a manual reload.
+  // Contacts list — load + poll so a newly-accepted contact appears live.
   useEffect(() => {
-    loadHome();
-    const id = setInterval(loadHome, 5000);
+    loadContacts();
+    const id = setInterval(loadContacts, 5000);
     return () => clearInterval(id);
   }, []);
 
-  async function loadHome() {
+  // While viewing a contact's conversation list, poll for live stats.
+  useEffect(() => {
+    if (!rel || thread) return;
+    loadThreads(rel.relationshipId);
+    const id = setInterval(() => loadThreads(rel.relationshipId), 5000);
+    return () => clearInterval(id);
+  }, [rel, thread]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function loadContacts() {
     try {
-      const [c, r] = await Promise.all([api.conversations(), api.relationships()]);
-      setConvs(c.conversations || []);
+      const r = await api.relationships();
       setRels(r.relationships || []);
     } catch (e) { setErr(e.message); }
   }
 
-  // Open a conversation straight from the flat list.
-  function openConversation(c) {
-    setRel({
-      relationshipId: c.relationshipId,
-      label: c.relationshipLabel,
-      partnerName: c.partnerName,
-    });
-    setThread({
-      threadId: c.threadId,
-      name: c.name,
-      purpose: c.purpose,
-      status: c.status,
-      safetyState: c.safetyState,
-    });
+  async function loadThreads(rid) {
+    try {
+      const t = await api.threads(rid);
+      const list = (t.threads || []).slice().sort((a, b) =>
+        (b.lastActivityAt || b.createdAt || "").localeCompare(a.lastActivityAt || a.createdAt || "")
+      );
+      setThreads(list);
+    } catch (_) { /* transient poll error */ }
   }
 
-  // Drill into a contact to see their conversations / start a new one.
-  async function openContact(r) {
-    setRel(r); setThread(null); setInvite(null); setThreads(null);
-    try { const t = await api.threads(r.relationshipId); setThreads(t.threads); }
-    catch (e) { setErr(e.message); }
+  function openContact(r) {
+    setRel(r); setThread(null); setThreads(null); setInvite(null);
   }
-
   function backHome() {
     setRel(null); setThread(null); setThreads(null); setInvite(null);
-    loadHome();
+    loadContacts();
   }
 
   async function createContact(e) {
@@ -85,7 +77,7 @@ export default function Home() {
         context: newRelContext || undefined,
       });
       setNewRel(""); setNewRelContext("");
-      await loadHome();
+      await loadContacts();
       openContact(r.relationship);
     } catch (e) { setErr(e.message); }
   }
@@ -99,8 +91,6 @@ export default function Home() {
         purpose: newThreadPurpose || undefined,
       });
       setNewThread(""); setNewThreadPurpose("");
-      const list = await api.threads(rel.relationshipId);
-      setThreads(list.threads);
       setThread(t.thread);
     } catch (e) { setErr(e.message); }
   }
@@ -122,32 +112,31 @@ export default function Home() {
     );
   }
 
-  // --- a contact's conversations (drill-down) --------------------------------
+  // --- a contact's conversations ---------------------------------------------
   if (rel) {
+    const name = rel.partnerName || rel.label;
     return (
       <div className="app">
         <div className="topbar">
           <button className="topbar__link" onClick={backHome}>←</button>
-          <h1 className="topbar__brand">{rel.partnerName || rel.label}</h1>
-          <span />
+          <h1 className="topbar__brand">{name}</h1>
+          <ThemeToggle />
         </div>
         <div className="home">
           {!rel.userBId && (
             <section className="invite-card">
               <span className="row__meta">
-                Invite {rel.partnerName || rel.label} — they join with one tap, no setup.
+                Not connected yet. Send {name} this link — one tap to join.
               </span>
               {invite ? (
                 <code className="invite-link">{invite}</code>
               ) : (
-                <button className="btn btn--ghost" onClick={makeInvite}>
-                  Create invite link
-                </button>
+                <button className="btn btn--ghost" onClick={makeInvite}>Create invite link</button>
               )}
             </section>
           )}
           <section>
-            <h2 className="section__title">Conversations with {rel.partnerName || rel.label}</h2>
+            <h2 className="section__title">Conversations</h2>
             {threads === null ? (
               <div className="empty">…</div>
             ) : threads.length === 0 ? (
@@ -155,10 +144,12 @@ export default function Home() {
             ) : (
               <div className="list">
                 {threads.map((t) => (
-                  <button key={t.threadId} className="row" onClick={() => setThread(t)}>
-                    <span className="row__title">{t.name}</span>
-                    <span className="row__meta">
-                      {t.safetyState === "ended" ? "ended" : t.purpose || t.status || "calm"}
+                  <button key={t.threadId} className="convo" onClick={() => setThread(t)}>
+                    <span className="convo__title">{t.name}</span>
+                    <span className="convo__stats">
+                      {(t.msgCount || 0)} message{t.msgCount === 1 ? "" : "s"}
+                      {t.lastActivityAt ? ` · ${relativeTime(t.lastActivityAt)}` : ""}
+                      {t.safetyState === "ended" ? " · ended" : ""}
                     </span>
                   </button>
                 ))}
@@ -167,22 +158,17 @@ export default function Home() {
           </section>
           <form className="inline-form" onSubmit={createConversation}>
             <input
-              className="field" placeholder="new conversation (e.g. Money, Feeling unheard)"
+              className="field" placeholder="new conversation (e.g. Money)"
               value={newThread} onChange={(e) => setNewThread(e.target.value)}
             />
             <input
-              className="field" list="purpose-options"
-              placeholder="purpose (optional)"
-              value={newThreadPurpose}
-              onChange={(e) => setNewThreadPurpose(e.target.value)}
+              className="field" list="purpose-options" placeholder="purpose (optional)"
+              value={newThreadPurpose} onChange={(e) => setNewThreadPurpose(e.target.value)}
               title="what is this conversation about (type anything or pick one)"
             />
             <datalist id="purpose-options">
-              <option value="planning" />
-              <option value="argument" />
-              <option value="repair" />
-              <option value="feedback" />
-              <option value="conflict" />
+              <option value="planning" /><option value="argument" /><option value="repair" />
+              <option value="feedback" /><option value="conflict" />
             </datalist>
             <button className="btn">Add</button>
           </form>
@@ -192,7 +178,7 @@ export default function Home() {
     );
   }
 
-  // --- home: conversations + contacts ----------------------------------------
+  // --- home: contacts --------------------------------------------------------
   return (
     <div className="app">
       <div className="topbar">
@@ -210,78 +196,39 @@ export default function Home() {
       </div>
 
       <div className="home">
-        <details className="panel" open>
-          <summary className="panel__summary">Conversations</summary>
-          <div className="panel__body">
-            {convs === null ? (
-              <div className="empty">…</div>
-            ) : convs.length === 0 ? (
-              <div className="empty">No conversations yet. Pick a contact below to start one.</div>
-            ) : (
-              <div className="list">
-                {convs.map((c) => (
-                  <button
-                    key={c.threadId}
-                    className="row"
-                    onClick={() => openConversation(c)}
-                  >
-                    <span className="row__title">
-                      {c.name}
-                      <span className="row__contact"> · {c.partnerName || c.relationshipLabel}</span>
-                    </span>
-                    <span className="row__meta">
-                      {c.safetyState === "ended" ? "ended" : c.purpose || c.status || "calm"}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </details>
-
-        <details className="panel">
-          <summary className="panel__summary">Contacts</summary>
-          <div className="panel__body">
-            {rels === null ? (
-              <div className="empty">…</div>
-            ) : rels.length === 0 ? (
-              <div className="empty">No contacts yet. Add one below and send them an invite.</div>
-            ) : (
-              <div className="list">
-                {rels.map((r) => (
-                  <button key={r.relationshipId} className="row" onClick={() => openContact(r)}>
-                    <span className="row__title">{r.partnerName || r.label}</span>
-                    <span className="row__meta">
-                      {r.userBId ? "connected" : "invite pending"}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-            <form className="inline-form" onSubmit={createContact}>
-              <input
-                className="field" placeholder="add a contact (e.g. Mom, Alex)"
-                value={newRel} onChange={(e) => setNewRel(e.target.value)}
-              />
-              <input
-                className="field" list="context-options"
-                placeholder="context (optional)"
-                value={newRelContext}
-                onChange={(e) => setNewRelContext(e.target.value)}
-                title="who you are to each other (type anything or pick one)"
-              />
-              <datalist id="context-options">
-                <option value="married" />
-                <option value="partnered" />
-                <option value="friends" />
-                <option value="family" />
-                <option value="co-parenting" />
-              </datalist>
-              <button className="btn">Add</button>
-            </form>
-          </div>
-        </details>
-
+        <section>
+          <h2 className="section__title">Contacts</h2>
+          {rels === null ? (
+            <div className="empty">…</div>
+          ) : rels.length === 0 ? (
+            <div className="empty">No contacts yet. Add someone below, then send them the invite link.</div>
+          ) : (
+            <div className="list">
+              {rels.map((r) => (
+                <button key={r.relationshipId} className="row" onClick={() => openContact(r)}>
+                  <span className="row__title">{r.partnerName || r.label}</span>
+                  <span className="row__meta">{r.userBId ? "connected" : "invite pending"}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <form className="inline-form" onSubmit={createContact}>
+            <input
+              className="field" placeholder="name this contact (e.g. Sam)"
+              value={newRel} onChange={(e) => setNewRel(e.target.value)}
+            />
+            <input
+              className="field" list="context-options" placeholder="context (optional)"
+              value={newRelContext} onChange={(e) => setNewRelContext(e.target.value)}
+              title="who you are to each other (type anything or pick one)"
+            />
+            <datalist id="context-options">
+              <option value="married" /><option value="partnered" /><option value="friends" />
+              <option value="family" /><option value="co-parenting" />
+            </datalist>
+            <button className="btn">Add</button>
+          </form>
+        </section>
         {err && <div className="auth__error">{err}</div>}
       </div>
     </div>

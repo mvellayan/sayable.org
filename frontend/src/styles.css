@@ -744,6 +744,16 @@ button.row { width: 100%; text-align: left; font: inherit; color: inherit; curso
 }
 .info-modal__body li { font-size: 15px; line-height: 1.5; }
 .info-modal__foot { margin: var(--s-md) 0 0; font-size: 13px; color: var(--ink-muted); }
+.info-modal__share { margin: var(--s-md) 0 0; font-size: 13px; }
+.info-modal__share a { color: var(--ink-muted); text-decoration: none; }
+.info-modal__share a:hover { color: var(--ink); }
+
+/* public /help page — a centered reading column reusing the modal typography */
+.doc {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: var(--s-xl) var(--s-lg) var(--s-2xl);
+}
 
 /* conversation rows — 2 lines: title + stat summary (contacts-first home) */
 .convo {

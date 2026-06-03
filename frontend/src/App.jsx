@@ -5,6 +5,7 @@ import SignIn from "./components/SignIn";
 import Home from "./components/Home";
 import InviteAccept from "./components/InviteAccept";
 import Admin from "./components/Admin";
+import Instructions from "./components/Instructions";
 
 export default function App() {
   const { token, user, loading } = useAuth();
@@ -24,6 +25,9 @@ export default function App() {
   // link sees SignIn, then lands back on /invite/:id (InviteAccept) once authed.
   return (
     <Routes>
+      {/* public — shareable how-to, no login required */}
+      <Route path="/help" element={<Instructions />} />
+      <Route path="/instructions" element={<Instructions />} />
       <Route path="/invite/:inviteId" element={authed ? <InviteAccept /> : <SignIn />} />
       <Route
         path="/admin"

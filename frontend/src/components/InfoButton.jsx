@@ -1,8 +1,59 @@
 import React, { useState, useEffect, useRef } from "react";
+import instructionsMd from "../instructions.md?raw";
+
+// Inline **bold** → <strong>; everything else passes through as text.
+function renderInline(text, k) {
+  return text.split(/\*\*(.+?)\*\*/g).map((part, i) =>
+    i % 2 === 1 ? <strong key={`${k}-b${i}`}>{part}</strong> : part
+  );
+}
+
+// Minimal markdown → the how-to modal's existing styles. Supports the subset
+// instructions.md uses: `# ` title, `> ` lede, `## ` section headings, `- `
+// bullet lists, `---` (everything after it is footnote-styled), and **bold**.
+// Edit src/instructions.md to change the copy — no code change needed.
+function renderMarkdown(md) {
+  const lines = md.replace(/\r\n/g, "\n").split("\n");
+  const blocks = [];
+  let list = null;
+  let afterRule = false;
+  let key = 0;
+  const flushList = () => {
+    if (!list) return;
+    const items = list;
+    blocks.push(
+      <ul key={`ul${key++}`}>
+        {items.map((it, i) => <li key={i}>{renderInline(it, `li${key}-${i}`)}</li>)}
+      </ul>
+    );
+    list = null;
+  };
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) { flushList(); continue; }
+    if (line === "---") { flushList(); afterRule = true; continue; }
+    if (line.startsWith("- ")) { (list ||= []).push(line.slice(2)); continue; }
+    flushList();
+    if (line.startsWith("# ")) {
+      blocks.push(<h2 key={`b${key++}`} className="info-modal__title">{renderInline(line.slice(2), `t${key}`)}</h2>);
+    } else if (line.startsWith("### ")) {
+      blocks.push(<h3 key={`b${key++}`}>{renderInline(line.slice(4), `h${key}`)}</h3>);
+    } else if (line.startsWith("## ")) {
+      blocks.push(<h3 key={`b${key++}`}>{renderInline(line.slice(3), `h${key}`)}</h3>);
+    } else if (line.startsWith("> ")) {
+      blocks.push(<p key={`b${key++}`} className="info-modal__lede">{renderInline(line.slice(2), `l${key}`)}</p>);
+    } else {
+      blocks.push(<p key={`b${key++}`} className={afterRule ? "info-modal__foot" : undefined}>{renderInline(line, `p${key}`)}</p>);
+    }
+  }
+  flushList();
+  return blocks;
+}
 
 // "i" icon → a quiet how-to modal. 44px tap target; focus moves into the modal on
 // open, is trapped while open, and returns to the trigger on close (keyboard +
-// screen-reader friendly). Esc / backdrop / × close.
+// screen-reader friendly). Esc / backdrop / × close. Copy lives in
+// src/instructions.md.
 export default function InfoButton() {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef(null);
@@ -88,44 +139,7 @@ export default function InfoButton() {
               ×
             </button>
             <div className="info-modal__body">
-              <h2 className="info-modal__title">How Sayable works</h2>
-              <p className="info-modal__lede">
-                Say the hard thing so it can actually be heard.
-              </p>
-
-              <h3>Start a conversation</h3>
-              <ul>
-                <li>Add a <strong>contact</strong>, then send them the invite link.</li>
-                <li>Once they accept, open a <strong>conversation</strong> and start texting.</li>
-                <li>A contact can have several conversations — tag each with a purpose.</li>
-              </ul>
-
-              <h3>Your private coach</h3>
-              <ul>
-                <li>Tap <strong>Check this</strong> before sending — see how it might land.</li>
-                <li>Pills name the feelings; tap a <strong>rewrite</strong> to send that version.</li>
-                <li><strong>Nudge</strong> to steer the coach: de-escalate, boundary, repair…</li>
-                <li>Only you see your coach — never your drafts or reviews.</li>
-              </ul>
-
-              <h3>Receiving</h3>
-              <ul>
-                <li>When a charged message arrives, your coach quietly reads it for you — privately.</li>
-              </ul>
-
-              <h3>The shared moderator</h3>
-              <ul>
-                <li>Tap <strong>Where are we?</strong> for one neutral beat you both see.</li>
-              </ul>
-
-              <h3>Safety</h3>
-              <ul>
-                <li>If a thread turns dangerous, Sayable stops and points to real-world help.</li>
-              </ul>
-
-              <p className="info-modal__foot">
-                Light or dark: use the sun/moon. Delete a conversation any time.
-              </p>
+              {renderMarkdown(instructionsMd)}
             </div>
           </div>
         </div>
